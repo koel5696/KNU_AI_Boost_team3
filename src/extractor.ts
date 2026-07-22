@@ -14,6 +14,17 @@ export type HomepagePost = {
   copyText: string;
 };
 
+export type SnsPost = {
+  body: string;
+  hashtags: string;
+  copyText: string;
+};
+
+export type MessageDraft = {
+  body: string;
+  copyText: string;
+};
+
 const NEEDS_REVIEW = "담당자 확인 필요";
 const ENDING_PATTERN = /(합니다|됩니다|주세요|있습니다|바랍니다|부탁드립니다|모집합니다|신청할 수 있습니다|제공됩니다|입니다|이어야 합니다)$/;
 const FULL_PHONE_PATTERN = /(?:0[0-9]{1,2})-[0-9]{3,4}-[0-9]{4}/;
@@ -287,4 +298,57 @@ ${contact}
 
 ${body}`,
   };
+}
+
+function compactValue(value: string) {
+  return value || NEEDS_REVIEW;
+}
+
+function hashtagValue(value: string) {
+  return value.replace(/[^0-9A-Za-z가-힣]/g, "");
+}
+
+export function buildSnsPost(info: ExtractedInfo): SnsPost {
+  const category = compactValue(info.category || "프로그램");
+  const audience = compactValue(normalizeAudience(info.audience));
+  const period = compactValue(info.period);
+  const benefit = compactValue(info.benefit);
+  const applyMethod = compactValue(info.applyMethod);
+  const contact = compactValue(info.contact);
+
+  const body = `📢 ${category} 참여자를 모집합니다!
+
+🙋 대상: ${audience}
+📅 기간: ${period}
+🎁 혜택: ${benefit}
+✅ 신청: ${applyMethod}
+☎️ 문의: ${contact}
+
+관심 있는 분들의 많은 참여 바랍니다.`;
+
+  const categoryTag = hashtagValue(info.category) || "프로그램안내";
+  const hashtags = `#강남대학교 #${categoryTag} #대학생활 #참여자모집`;
+
+  return {
+    body,
+    hashtags,
+    copyText: `${body}\n\n${hashtags}`,
+  };
+}
+
+export function buildMessageDraft(info: ExtractedInfo): MessageDraft {
+  const category = info.category || "프로그램";
+  const audience = normalizeAudience(info.audience) || NEEDS_REVIEW;
+  const period = info.period || NEEDS_REVIEW;
+  const applyMethod = info.applyMethod || NEEDS_REVIEW;
+  const contact = info.contact || NEEDS_REVIEW;
+
+  const body = `[강남대학교 ${category} 안내]
+대상: ${audience}
+기간: ${period}
+신청: ${applyMethod}
+문의: ${contact}
+※ 자세한 내용은 학교 홈페이지 공지를 확인해 주세요.`;
+
+  return { body, copyText: body };
 }
