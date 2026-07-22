@@ -1,6 +1,7 @@
 import { buildHomepagePost, buildMessageDraft, buildSnsPost, extractInfo, sampleMail } from "./extractor";
 import { analyzeSources } from "./sourceAnalysis";
 import type { ProcessedSource } from "./documentProcessor";
+import { buildImageDraft } from "./imageDraft";
 
 function assert(condition: boolean, message: string) {
   if (!condition) {
@@ -12,6 +13,8 @@ const normal = extractInfo(sampleMail);
 const post = buildHomepagePost(normal);
 const snsPost = buildSnsPost(normal);
 const messageDraft = buildMessageDraft(normal);
+const promotionalImage = buildImageDraft(normal, "SNS", "promotional");
+const informationalImage = buildImageDraft(normal, "홈페이지", "informational");
 
 assert(normal.category === "교육/직무훈련", "정상 입력에서 유형 추출 실패");
 assert(normal.audience === "19~34세 청년", "정상 입력에서 대상 정리 실패");
@@ -27,6 +30,10 @@ assert(snsPost.copyText.includes("#강남대학교"), "SNS 해시태그 생성 �
 assert(snsPost.copyText.includes("📅 기간:"), "SNS 채널 형식 생성 실패");
 assert(messageDraft.copyText.startsWith("[강남대학교"), "메시지 채널 형식 생성 실패");
 assert(messageDraft.copyText.includes("학교 홈페이지 공지"), "메시지 상세 안내 문구 생성 실패");
+assert(promotionalImage.title.includes("참여자를 모집"), "홍보용 이미지 제목 생성 실패");
+assert(promotionalImage.channelLabel === "SNS", "이미지 채널 정보 반영 실패");
+assert(informationalImage.title.includes("프로그램 안내"), "안내용 이미지 제목 생성 실패");
+assert(informationalImage.contact === "02-1234-5678", "이미지 문의처 반영 실패");
 
 const emptyMessage =
   "메일 내용을 입력해 주세요. 공유 메일 본문이나 제목을 붙여넣으면 예시 추출 결과를 만들 수 있습니다.";
