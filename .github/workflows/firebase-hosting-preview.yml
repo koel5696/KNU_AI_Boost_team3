@@ -33,7 +33,20 @@ jobs:
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
           VITE_FIREBASE_MEASUREMENT_ID: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
 
+      - name: Check Firebase deploy secret
+        id: firebase_secret
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KNU_TEAM3_9D7B4 }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::warning::Firebase preview deploy skipped because FIREBASE_SERVICE_ACCOUNT_KNU_TEAM3_9D7B4 is unavailable in this pull_request run."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: FirebaseExtended/action-hosting-deploy@v0
+        if: ${{ steps.firebase_secret.outputs.available == 'true' }}
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KNU_TEAM3_9D7B4 }}
