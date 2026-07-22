@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useCallback,
   useMemo,
   useRef,
   useState,
@@ -173,7 +174,7 @@ function App() {
       });
   }, [analysis, mailText, result]);
 
-  const processFiles = async (fileList: FileList | File[]) => {
+  const processFiles = useCallback(async (fileList: FileList | File[]) => {
     setError("");
     setAnalysis(null);
     setLoadedResult(null);
@@ -245,7 +246,20 @@ function App() {
         );
       }
     }
-  };
+  }, [uploads.length]);
+
+  useEffect(() => {
+    const handleWindowPaste = (event: ClipboardEvent) => {
+      const files = event.clipboardData?.files;
+      if (!files?.length) return;
+
+      event.preventDefault();
+      void processFiles(files);
+    };
+
+    window.addEventListener("paste", handleWindowPaste);
+    return () => window.removeEventListener("paste", handleWindowPaste);
+  }, [processFiles]);
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) void processFiles(event.target.files);
@@ -472,9 +486,6 @@ function App() {
                 setMailText(event.target.value);
                 setAnalysis(null);
                 setLoadedResult(null);
-              }}
-              onPaste={(event) => {
-                if (event.clipboardData.files.length) void processFiles(event.clipboardData.files);
               }}
               placeholder="외부 공고 또는 공유 메일 내용을 붙여넣어 주세요. 클립보드의 이미지도 붙여넣을 수 있습니다."
               aria-label="공유 메일 본문 입력"
