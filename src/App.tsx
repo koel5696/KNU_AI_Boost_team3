@@ -3,8 +3,10 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clipboard,
+  Download,
   FileText,
   Hash,
+  Image as ImageIcon,
   Lightbulb,
   MessageCircle,
   Monitor,
@@ -20,6 +22,12 @@ import {
   type ExtractedInfo,
   type HomepagePost,
 } from "./extractor";
+import {
+  buildImageDraft,
+  downloadImageDraft,
+  type ImageDraft,
+  type ImageTemplate,
+} from "./imageDraft";
 
 type Channel = "homepage" | "sns" | "message";
 
@@ -37,6 +45,8 @@ function App() {
   const [copyState, setCopyState] = useState("홈페이지 초안 복사");
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
   const [activeChannel, setActiveChannel] = useState<Channel>("homepage");
+  const [imageTemplate, setImageTemplate] = useState<ImageTemplate>("promotional");
+  const [imageStatus, setImageStatus] = useState("");
 
   const channelDrafts = useMemo(() => {
     if (!result || !post) return null;
@@ -50,6 +60,11 @@ function App() {
       messageDraft: message,
     };
   }, [post, result]);
+
+  const imageDraft = useMemo(
+    () => result ? buildImageDraft(result, channelLabels[activeChannel], imageTemplate) : null,
+    [activeChannel, imageTemplate, result],
+  );
 
   const missingItems = useMemo(() => {
     if (!result) return [];
@@ -97,6 +112,7 @@ function App() {
     setActiveChannel("homepage");
     setCopyState("홈페이지 초안 복사");
     setReviewConfirmed(false);
+    setImageStatus("");
     setError("");
 
     if (!mailText.trim()) {
@@ -125,6 +141,7 @@ function App() {
     setActiveChannel("homepage");
     setCopyState("홈페이지 초안 복사");
     setReviewConfirmed(false);
+    setImageStatus("");
   };
 
   const handleCopy = async () => {
@@ -144,6 +161,23 @@ function App() {
   const handleChannelSelect = (channel: Channel) => {
     setActiveChannel(channel);
     setCopyState(`${channelLabels[channel]} 초안 복사`);
+    setImageStatus("");
+  };
+
+  const handleImageTemplateSelect = (template: ImageTemplate) => {
+    setImageTemplate(template);
+    setImageStatus("");
+  };
+
+  const handleImageDownload = async () => {
+    if (!imageDraft || !reviewConfirmed) return;
+    setImageStatus("이미지 만드는 중…");
+    try {
+      const fileName = await downloadImageDraft(imageDraft);
+      setImageStatus(`${fileName} 저장 완료`);
+    } catch {
+      setImageStatus("이미지 저장에 실패했습니다.");
+    }
   };
 
   return (
@@ -316,6 +350,55 @@ function App() {
                     <p className="draft-note">메시지는 핵심 정보만 간결하게 구성했습니다. 발송 전 홈페이지 링크를 추가해 주세요.</p>
                   </div>
                 )}
+                {imageDraft && (
+                  <div className="image-maker">
+                    <div className="image-maker-heading">
+                      <div>
+                        <p className="panel-kicker">이미지 제작</p>
+                        <h3>초안을 홍보·안내 이미지로 만들기</h3>
+                      </div>
+                      <button
+                        className="image-download-button"
+                        type="button"
+                        onClick={handleImageDownload}
+                        disabled={!reviewConfirmed}
+                      >
+                        <Download size={18} />
+                        PNG 이미지 저장
+                      </button>
+                    </div>
+                    <div className="image-template-tabs" aria-label="이미지 유형 선택">
+                      <button
+                        type="button"
+                        aria-pressed={imageTemplate === "promotional"}
+                        className={imageTemplate === "promotional" ? "is-active" : ""}
+                        onClick={() => handleImageTemplateSelect("promotional")}
+                      >
+                        <ImageIcon size={18} />
+                        <span><strong>홍보용</strong><small>눈에 띄는 모집·혜택 중심</small></span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={imageTemplate === "informational"}
+                        className={imageTemplate === "informational" ? "is-active" : ""}
+                        onClick={() => handleImageTemplateSelect("informational")}
+                      >
+                        <FileText size={18} />
+                        <span><strong>안내용</strong><small>정보를 빠르게 확인하는 구성</small></span>
+                      </button>
+                    </div>
+                    <div className="image-workspace">
+                      <ImageDraftPreview draft={imageDraft} />
+                      <div className="image-guide">
+                        <strong>1080 × 1350 PNG</strong>
+                        <span>SNS 피드와 모바일 안내에 적합한 4:5 비율입니다.</span>
+                        <span>현재 {channelLabels[activeChannel]} 초안의 핵심 정보가 반영됩니다.</span>
+                        <span>{reviewConfirmed ? "검토가 완료되어 저장할 수 있습니다." : "위 검토 확인란을 선택하면 저장할 수 있습니다."}</span>
+                        {imageStatus && <em role="status">{imageStatus}</em>}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               )}
             </>
@@ -372,6 +455,30 @@ function ChannelTab({ channel, activeChannel, icon, onSelect }: { channel: Chann
     <button className={isActive ? "channel-tab is-active" : "channel-tab"} type="button" role="tab" aria-selected={isActive} onClick={() => onSelect(channel)}>
       {icon}<span>{channelLabels[channel]}</span>
     </button>
+  );
+}
+
+function ImageDraftPreview({ draft }: { draft: ImageDraft }) {
+  return (
+    <div className={`visual-card is-${draft.template}`} aria-label={`${draft.template === "promotional" ? "홍보용" : "안내용"} 이미지 미리보기`}>
+      <div className="visual-card-brand">
+        <strong>KNU</strong>
+        <span>KANGNAM UNIVERSITY</span>
+        <small>{draft.channelLabel} IMAGE</small>
+      </div>
+      <p className="visual-card-kicker">{draft.category}</p>
+      <h4>{draft.title}</h4>
+      <p className="visual-card-audience">대상 · {draft.audience}</p>
+      <div className="visual-card-highlight">
+        <span>주요 혜택</span>
+        <strong>{draft.benefit}</strong>
+      </div>
+      <dl>
+        <div><dt>기간</dt><dd>{draft.period}</dd></div>
+        <div><dt>신청</dt><dd>{draft.applyMethod}</dd></div>
+      </dl>
+      <footer>문의 · {draft.contact}</footer>
+    </div>
   );
 }
 
