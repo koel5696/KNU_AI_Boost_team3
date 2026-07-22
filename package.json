@@ -5,6 +5,8 @@
     "preview": "vite preview --host 127.0.0.1",
     "build": "vite build",
     "deploy": "npm run build && firebase deploy --only hosting",
+    "deploy:firestore": "firebase deploy --only firestore",
+    "deploy:all": "npm run build && firebase deploy",
     "lint": "eslint .",
     "check:prototype": "tsx src/prototype-check.ts"
   },
