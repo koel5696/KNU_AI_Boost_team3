@@ -165,45 +165,108 @@ function drawPromoItem(
 }
 
 function drawInformational(context: CanvasRenderingContext2D, draft: ImageDraft) {
-  context.fillStyle = "#f4f8fc";
+  context.fillStyle = "#eef3f8";
   context.fillRect(0, 0, WIDTH, HEIGHT);
-  context.fillStyle = "#06315f";
-  context.fillRect(0, 0, WIDTH, 350);
-  context.fillStyle = "#5dc7ef";
-  context.fillRect(0, 0, 18, HEIGHT);
+  const headerGradient = context.createLinearGradient(0, 0, WIDTH, 440);
+  headerGradient.addColorStop(0, "#052b57");
+  headerGradient.addColorStop(1, "#0a568d");
+  context.fillStyle = headerGradient;
+  context.fillRect(0, 0, WIDTH, 440);
 
-  context.fillStyle = "#bdeaff";
-  context.font = `800 26px ${FONT_FAMILY}`;
-  context.fillText(`KANGNAM UNIVERSITY · ${draft.channelLabel}`, 72, 80);
+  context.strokeStyle = "rgba(130,215,255,0.18)";
+  context.lineWidth = 28;
+  context.beginPath();
+  context.arc(1010, 35, 190, 0, Math.PI * 2);
+  context.stroke();
+
   context.fillStyle = "#ffffff";
-  context.font = `900 68px ${FONT_FAMILY}`;
-  wrapText(context, draft.title, 72, 174, 900, 84, 2);
-  context.fillStyle = "#cceaff";
-  context.font = `700 31px ${FONT_FAMILY}`;
-  wrapText(context, `참여 대상 · ${draft.audience}`, 72, 310, 900, 40, 1);
+  context.beginPath();
+  context.arc(92, 75, 35, 0, Math.PI * 2);
+  context.fill();
+  context.fillStyle = "#06315f";
+  context.font = `900 18px ${FONT_FAMILY}`;
+  context.textAlign = "center";
+  context.fillText("KNU", 92, 82);
+  context.textAlign = "left";
+  context.fillStyle = "#ffffff";
+  context.font = `800 24px ${FONT_FAMILY}`;
+  context.fillText("KANGNAM UNIVERSITY", 145, 72);
+  context.fillStyle = "#9fdcff";
+  context.font = `700 18px ${FONT_FAMILY}`;
+  context.fillText("NOTICE HELPER", 145, 99);
+
+  context.fillStyle = "rgba(255,255,255,0.13)";
+  roundedRect(context, 795, 55, 215, 48, 24);
+  context.fill();
+  context.fillStyle = "#d7f1ff";
+  context.font = `800 18px ${FONT_FAMILY}`;
+  context.textAlign = "center";
+  context.fillText(`${draft.channelLabel} · OFFICIAL`, 902, 86);
+  context.textAlign = "left";
+
+  context.fillStyle = "#55c6ef";
+  roundedRect(context, 72, 132, 245, 45, 22);
+  context.fill();
+  context.fillStyle = "#052b57";
+  context.font = `900 21px ${FONT_FAMILY}`;
+  context.fillText(draft.category, 94, 162);
+
+  context.fillStyle = "#ffffff";
+  context.font = `900 61px ${FONT_FAMILY}`;
+  const titleBottom = wrapText(context, draft.title, 72, 237, 900, 73, 2);
+  const audienceY = Math.min(titleBottom + 8, 372);
+  context.fillStyle = "rgba(255,255,255,0.12)";
+  roundedRect(context, 72, audienceY, 936, 52, 14);
+  context.fill();
+  context.fillStyle = "#d8f2ff";
+  context.font = `700 25px ${FONT_FAMILY}`;
+  wrapText(context, `참여 대상  |  ${draft.audience}`, 98, audienceY + 34, 860, 32, 1);
+
+  context.fillStyle = "#173d63";
+  context.font = `900 30px ${FONT_FAMILY}`;
+  context.fillText("한눈에 보는 핵심 안내", 72, 491);
+  context.fillStyle = "#58bde6";
+  context.fillRect(72, 510, 936, 5);
 
   const items = [
-    ["기간", draft.period],
-    ["주요 혜택", draft.benefit],
-    ["신청 방법", draft.applyMethod],
-    ["문의", draft.contact],
+    ["01", "기간", draft.period, "#eaf6fd"],
+    ["02", "주요 혜택", draft.benefit, "#fff9e7"],
+    ["03", "신청 방법", draft.applyMethod, "#ffffff"],
+    ["04", "문의", draft.contact, "#ffffff"],
   ];
-  items.forEach(([label, value], index) => {
-    const y = 410 + index * 195;
-    context.fillStyle = "#ffffff";
-    roundedRect(context, 70, y, 940, 160, 20);
+  items.forEach(([number, label, value, background], index) => {
+    const y = 542 + index * 174;
+    context.save();
+    context.shadowColor = "rgba(19,55,88,0.09)";
+    context.shadowBlur = 18;
+    context.shadowOffsetY = 6;
+    context.fillStyle = background;
+    roundedRect(context, 70, y, 940, 150, 18);
     context.fill();
-    context.fillStyle = "#0072bc";
-    context.font = `900 27px ${FONT_FAMILY}`;
-    context.fillText(label, 108, y + 54);
+    context.restore();
+    context.fillStyle = index === 1 ? "#ffcc3d" : "#0b73b7";
+    roundedRect(context, 96, y + 30, 62, 62, 16);
+    context.fill();
+    context.fillStyle = index === 1 ? "#4c3a00" : "#ffffff";
+    context.font = `900 22px ${FONT_FAMILY}`;
+    context.textAlign = "center";
+    context.fillText(number, 127, y + 70);
+    context.textAlign = "left";
+    context.fillStyle = "#53708b";
+    context.font = `800 22px ${FONT_FAMILY}`;
+    context.fillText(label, 190, y + 48);
     context.fillStyle = "#172333";
-    context.font = `800 36px ${FONT_FAMILY}`;
-    wrapText(context, value, 108, y + 111, 830, 44, 2);
+    context.font = `900 32px ${FONT_FAMILY}`;
+    wrapText(context, value, 190, y + 96, 760, 39, 2);
   });
 
-  context.fillStyle = "#496078";
-  context.font = `700 25px ${FONT_FAMILY}`;
-  context.fillText("자세한 내용은 학교 홈페이지 공지를 확인해 주세요.", 72, HEIGHT - 65);
+  context.fillStyle = "#06315f";
+  context.fillRect(0, HEIGHT - 82, WIDTH, 82);
+  context.fillStyle = "#d7f1ff";
+  context.font = `700 23px ${FONT_FAMILY}`;
+  context.textAlign = "center";
+  context.fillText("게시 전 학교 홈페이지에서 상세 내용을 확인해 주세요.", WIDTH / 2, HEIGHT - 32);
+  context.textAlign = "left";
 }
 
 function renderImageDraft(draft: ImageDraft) {
