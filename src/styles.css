@@ -362,6 +362,38 @@ button:focus-visible {
   padding-top: 18px;
 }
 
+.channel-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 5px;
+  border-radius: 8px;
+  background: #eef3f8;
+}
+
+.channel-tab {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #53657a;
+  font-weight: 900;
+}
+
+.channel-tab:hover { color: var(--deep-blue); }
+
+.channel-tab.is-active {
+  border-color: #bfd6ea;
+  background: #fff;
+  color: var(--blue);
+  box-shadow: 0 2px 7px rgba(22, 47, 82, 0.1);
+}
+
 .evidence-box {
   margin-top: 14px;
   border: 1px solid #dce7f1;
@@ -484,6 +516,78 @@ pre {
   border-radius: 0;
 }
 
+.sns-preview,
+.message-preview {
+  overflow: hidden;
+  border: 1px solid #cfddea;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.sns-profile {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 14px 16px 4px;
+}
+
+.sns-profile > span:last-child { display: grid; }
+.sns-profile small { color: var(--muted); }
+
+.sns-avatar {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--deep-blue);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.sns-preview pre { border: 0; background: #fff; }
+
+.hashtags {
+  margin: -8px 16px 16px;
+  color: var(--blue);
+  line-height: 1.55;
+}
+
+.message-preview {
+  padding: 16px;
+  background: #f4f8fc;
+}
+
+.message-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  color: #40536a;
+  font-size: 13px;
+}
+
+.message-meta span { color: var(--muted); }
+
+.message-bubble {
+  width: min(92%, 420px);
+  margin-left: auto;
+  border-radius: 16px 16px 4px 16px;
+  padding: 15px 16px;
+  background: #ffdf4f;
+  color: #27230f;
+  white-space: pre-wrap;
+  line-height: 1.58;
+  box-shadow: 0 4px 12px rgba(64, 55, 12, 0.1);
+}
+
+.draft-note {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .empty-state {
   display: grid;
   min-height: 420px;
@@ -578,6 +682,12 @@ ul {
 
   .info-grid {
     grid-template-columns: 1fr;
+  }
+
+  .channel-tab {
+    flex-direction: column;
+    gap: 3px;
+    font-size: 12px;
   }
 
   .primary-button,

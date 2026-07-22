@@ -1,28 +1,55 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
   Clipboard,
   FileText,
+  Hash,
   Lightbulb,
+  MessageCircle,
+  Monitor,
   RefreshCcw,
   Sparkles,
 } from "lucide-react";
 import {
   buildHomepagePost,
+  buildMessageDraft,
+  buildSnsPost,
   extractInfo,
   sampleMail,
   type ExtractedInfo,
   type HomepagePost,
 } from "./extractor";
 
+type Channel = "homepage" | "sns" | "message";
+
+const channelLabels: Record<Channel, string> = {
+  homepage: "홈페이지",
+  sns: "SNS",
+  message: "메시지",
+};
+
 function App() {
   const [mailText, setMailText] = useState(sampleMail);
   const [result, setResult] = useState<ExtractedInfo | null>(null);
   const [post, setPost] = useState<HomepagePost | null>(null);
   const [error, setError] = useState("");
-  const [copyState, setCopyState] = useState("홈페이지 글 복사");
+  const [copyState, setCopyState] = useState("홈페이지 초안 복사");
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
+  const [activeChannel, setActiveChannel] = useState<Channel>("homepage");
+
+  const channelDrafts = useMemo(() => {
+    if (!result || !post) return null;
+    const sns = buildSnsPost(result);
+    const message = buildMessageDraft(result);
+    return {
+      homepage: post.copyText,
+      sns: sns.copyText,
+      message: message.copyText,
+      snsPost: sns,
+      messageDraft: message,
+    };
+  }, [post, result]);
 
   const missingItems = useMemo(() => {
     if (!result) return [];
@@ -67,7 +94,8 @@ function App() {
   }, [mailText, result]);
 
   const handleGenerate = () => {
-    setCopyState("홈페이지 글 복사");
+    setActiveChannel("homepage");
+    setCopyState("홈페이지 초안 복사");
     setReviewConfirmed(false);
     setError("");
 
@@ -94,22 +122,28 @@ function App() {
     setResult(null);
     setPost(null);
     setError("");
-    setCopyState("홈페이지 글 복사");
+    setActiveChannel("homepage");
+    setCopyState("홈페이지 초안 복사");
     setReviewConfirmed(false);
   };
 
   const handleCopy = async () => {
-    if (!post) return;
+    if (!channelDrafts) return;
     if (!reviewConfirmed) {
       setCopyState("확인 후 복사");
       return;
     }
     try {
-      await navigator.clipboard.writeText(post.copyText);
-      setCopyState("게시글 복사됨");
+      await navigator.clipboard.writeText(channelDrafts[activeChannel]);
+      setCopyState(`${channelLabels[activeChannel]} 초안 복사됨`);
     } catch {
       setCopyState("복사 실패");
     }
+  };
+
+  const handleChannelSelect = (channel: Channel) => {
+    setActiveChannel(channel);
+    setCopyState(`${channelLabels[channel]} 초안 복사`);
   };
 
   return (
@@ -137,9 +171,9 @@ function App() {
       <section className="hero">
         <div>
           <p className="eyebrow">대학교 부서 공지 초안 도우미</p>
-          <h1>공유 메일을 홈페이지 공지 초안으로 빠르게 정리</h1>
+          <h1>공유 메일 하나로 채널별 공지 초안을 한 번에</h1>
           <p className="hero-copy">
-            행정, 홍보, 취업지원 담당자가 외부 공고 메일에서 핵심 정보를 확인하고 누락된 항목을 바로 발견할 수 있는 1-Day P0 프로토타입입니다.
+            외부 공고 메일에서 핵심 정보를 확인하고 홈페이지, SNS, 메시지에 맞는 초안을 바로 만들어 보세요.
           </p>
         </div>
         <div className="notice">
@@ -187,7 +221,7 @@ function App() {
           <div className="panel-heading" id="result">
             <div>
               <p className="panel-kicker">결과</p>
-              <h2>추출 정보와 홈페이지 게시글</h2>
+              <h2>추출 정보와 채널별 공지 초안</h2>
             </div>
             <span className="status-pill">{result ? "검토 필요" : "대기 중"}</span>
           </div>
@@ -224,20 +258,28 @@ function App() {
                 </ul>
               </div>
 
-              {post && (
+              {post && channelDrafts && (
                 <div className="draft-box">
                 <div className="draft-heading">
-                  <h3>학교 홈페이지 게시용 글</h3>
+                  <div>
+                    <p className="panel-kicker">채널별 초안</p>
+                    <h3>{channelLabels[activeChannel]} 게시용 글</h3>
+                  </div>
                   <button
                     className="icon-button"
                     type="button"
                     onClick={handleCopy}
                     disabled={!reviewConfirmed}
-                    aria-label="홈페이지 게시글 복사"
+                    aria-label={`${channelLabels[activeChannel]} 초안 복사`}
                   >
                     <Clipboard size={18} />
                     {copyState}
                   </button>
+                </div>
+                <div className="channel-tabs" role="tablist" aria-label="초안 채널 선택">
+                  <ChannelTab channel="homepage" activeChannel={activeChannel} icon={<Monitor size={18} />} onSelect={handleChannelSelect} />
+                  <ChannelTab channel="sns" activeChannel={activeChannel} icon={<Hash size={18} />} onSelect={handleChannelSelect} />
+                  <ChannelTab channel="message" activeChannel={activeChannel} icon={<MessageCircle size={18} />} onSelect={handleChannelSelect} />
                 </div>
                 <label className="review-check">
                   <input
@@ -245,7 +287,7 @@ function App() {
                     checked={reviewConfirmed}
                     onChange={(event) => {
                       setReviewConfirmed(event.target.checked);
-                      setCopyState("홈페이지 글 복사");
+                      setCopyState(`${channelLabels[activeChannel]} 초안 복사`);
                     }}
                   />
                   <span>
@@ -253,24 +295,34 @@ function App() {
                     원문과 비교하여 제목, 대상, 기간, 신청 방법, 문의처에 문제가 없음을 확인했습니다.
                   </span>
                 </label>
-                <div className="post-preview" aria-label="홈페이지 게시용 글 미리보기">
-                  <div className="post-field">
-                    <span>제목</span>
-                    <strong>{post.title}</strong>
+                {activeChannel === "homepage" && (
+                  <div className="post-preview" role="tabpanel" aria-label="홈페이지 게시용 글 미리보기">
+                    <div className="post-field"><span>제목</span><strong>{post.title}</strong></div>
+                    <div className="post-field"><span>분류</span><strong>{post.category}</strong></div>
+                    <pre>{post.body}</pre>
                   </div>
-                  <div className="post-field">
-                    <span>분류</span>
-                    <strong>{post.category}</strong>
+                )}
+                {activeChannel === "sns" && (
+                  <div className="sns-preview" role="tabpanel" aria-label="SNS 게시용 글 미리보기">
+                    <div className="sns-profile"><span className="sns-avatar">KNU</span><span><strong>강남대학교</strong><small>@kangnam_univ</small></span></div>
+                    <pre>{channelDrafts.snsPost.body}</pre>
+                    <p className="hashtags">{channelDrafts.snsPost.hashtags}</p>
                   </div>
-                  <pre>{post.body}</pre>
-                </div>
+                )}
+                {activeChannel === "message" && (
+                  <div className="message-preview" role="tabpanel" aria-label="메시지 발송용 글 미리보기">
+                    <div className="message-meta"><strong>문자·메신저 발송용</strong><span>{channelDrafts.messageDraft.body.length}자</span></div>
+                    <div className="message-bubble">{channelDrafts.messageDraft.body}</div>
+                    <p className="draft-note">메시지는 핵심 정보만 간결하게 구성했습니다. 발송 전 홈페이지 링크를 추가해 주세요.</p>
+                  </div>
+                )}
               </div>
               )}
             </>
           ) : (
             <div className="empty-state">
               <Lightbulb size={28} />
-              <p>메일 내용을 입력하고 메일 내용 정리하기를 누르면 유형, 대상, 기간, 신청 방법, 문의처와 홈페이지 게시용 글이 표시됩니다.</p>
+              <p>메일 내용을 입력하고 정리하기를 누르면 핵심 정보와 홈페이지, SNS, 메시지용 초안이 표시됩니다.</p>
             </div>
           )}
         </div>
@@ -311,6 +363,15 @@ function Info({ label, value }: { label: string; value: string }) {
       <span>{label}</span>
       <strong>{value || "담당자 확인 필요"}</strong>
     </div>
+  );
+}
+
+function ChannelTab({ channel, activeChannel, icon, onSelect }: { channel: Channel; activeChannel: Channel; icon: ReactNode; onSelect: (channel: Channel) => void }) {
+  const isActive = channel === activeChannel;
+  return (
+    <button className={isActive ? "channel-tab is-active" : "channel-tab"} type="button" role="tab" aria-selected={isActive} onClick={() => onSelect(channel)}>
+      {icon}<span>{channelLabels[channel]}</span>
+    </button>
   );
 }
 
