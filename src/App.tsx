@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -18,16 +19,20 @@ import {
   Image as ImageIcon,
   Lightbulb,
   LoaderCircle,
+  LogIn,
+  LogOut,
   Mail,
   MessageCircle,
   Monitor,
   Paperclip,
   QrCode,
   RefreshCcw,
+  Save,
   Sparkles,
   Upload,
   X,
 } from "lucide-react";
+import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 import {
   buildHomepagePost,
   buildMessageDraft,
@@ -55,6 +60,8 @@ import {
   type ImageDraft,
   type ImageTemplate,
 } from "./imageDraft";
+import { auth, firebaseEnabled, googleProvider } from "./firebase";
+import { loadNoticeDrafts, saveNoticeDraft, type SavedNotice } from "./noticeHistory";
 
 type Channel = "homepage" | "sns" | "message";
 type UploadStatus = "queued" | "processing" | "done" | "error";
@@ -87,7 +94,37 @@ function App() {
   const [imageTemplate, setImageTemplate] = useState<ImageTemplate>("promotional");
   const [imageStatus, setImageStatus] = useState("");
   const [isDragging, setIsDragging] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [savedNotices, setSavedNotices] = useState<SavedNotice[]>([]);
+  const [historyMessage, setHistoryMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!auth) {
+      setAuthReady(true);
+      setHistoryMessage("Firebase가 설정되지 않아 로그인·저장 기능 없이 로컬 모드로 실행 중입니다.");
+      return;
+    }
+
+    return onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      setAuthReady(true);
+      setHistoryMessage("");
+
+      if (!currentUser) {
+        setSavedNotices([]);
+        return;
+      }
+
+      try {
+        setSavedNotices(await loadNoticeDrafts(currentUser.uid));
+      } catch {
+        setHistoryMessage("저장된 공지를 불러오지 못했습니다. Firestore 설정을 확인해 주세요.");
+      }
+    });
+  }, []);
 
   const result = analysis?.info ?? null;
   const allSources = useMemo(
@@ -214,6 +251,7 @@ function App() {
     setReviewConfirmed(false);
     setImageStatus("");
     setError("");
+    setHistoryMessage("");
 
     if (isProcessing) {
       setError("파일 처리가 끝난 뒤 내용을 정리해 주세요.");
@@ -241,6 +279,8 @@ function App() {
     setActiveChannel("homepage");
     setCopyState("홈페이지 초안 복사");
     setReviewConfirmed(false);
+    setImageStatus("");
+    setHistoryMessage("");
   };
 
   const removeUpload = (id: string) => {
@@ -311,6 +351,80 @@ function App() {
     setReviewConfirmed(false);
   };
 
+  const handleLogin = async () => {
+    setHistoryMessage("");
+    if (!auth || !googleProvider) {
+      setHistoryMessage("Firebase 환경변수를 설정하면 Google 로그인과 공지 저장을 사용할 수 있습니다.");
+      return;
+    }
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch {
+      setHistoryMessage("Google 로그인에 실패했습니다. Firebase Authentication 설정을 확인해 주세요.");
+    }
+  };
+
+  const handleLogout = async () => {
+    setHistoryMessage("");
+    if (!auth) return;
+    try {
+      await signOut(auth);
+    } catch {
+      setHistoryMessage("로그아웃에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user) {
+      setHistoryMessage("로그인 후 공지를 저장할 수 있습니다.");
+      return;
+    }
+    if (!post || !result) return;
+
+    setIsSaving(true);
+    setHistoryMessage("");
+    try {
+      const saved = await saveNoticeDraft({
+        userId: user.uid,
+        post,
+        sourceMail: mailText,
+        extractedInfo: result,
+      });
+      setSavedNotices((current) => [saved, ...current]);
+      setHistoryMessage("현재 공지 초안을 저장했습니다.");
+    } catch {
+      setHistoryMessage("공지 저장에 실패했습니다. Firestore 권한과 규칙을 확인해 주세요.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleLoadSavedNotice = (notice: SavedNotice) => {
+    const restored = analyzeSources(notice.sourceMail, []);
+    const fields = restored.fields.map((field) => ({
+      ...field,
+      value: notice.extractedInfo[field.key],
+      confidence: 1,
+      sourceName: "저장된 공지",
+      evidence: "사용자가 저장한 공지에서 불러온 값",
+      hasConflict: false,
+    }));
+
+    setMailText(notice.sourceMail);
+    setUploads([]);
+    setAnalysis({
+      ...restored,
+      info: notice.extractedInfo,
+      fields,
+      conflicts: [],
+    });
+    setActiveChannel("homepage");
+    setReviewConfirmed(false);
+    setCopyState("홈페이지 초안 복사");
+    setImageStatus("");
+    setHistoryMessage("저장된 공지를 현재 작업 화면으로 불러왔습니다.");
+  };
+
   return (
     <main>
       <header className="site-header">
@@ -328,7 +442,15 @@ function App() {
             <a href="#input">자료입력</a>
             <a href="#result">추출결과</a>
             <a href="#draft">공지초안</a>
+            <a href="#history">저장공지</a>
           </nav>
+          <AuthPanel
+            authReady={authReady}
+            firebaseEnabled={firebaseEnabled}
+            user={user}
+            onLogin={handleLogin}
+            onLogout={handleLogout}
+          />
         </div>
       </header>
 
@@ -511,16 +633,27 @@ function App() {
                       <p className="panel-kicker">채널별 초안</p>
                       <h3>{channelLabels[activeChannel]} 게시용 글</h3>
                     </div>
-                    <button
-                      className="icon-button"
-                      type="button"
-                      onClick={handleCopy}
-                      disabled={!reviewConfirmed}
-                      aria-label={`${channelLabels[activeChannel]} 초안 복사`}
-                    >
-                      <Clipboard size={18} />
-                      {copyState}
-                    </button>
+                    <div className="draft-actions">
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={handleSave}
+                        disabled={isSaving}
+                      >
+                        <Save size={18} />
+                        {isSaving ? "저장 중" : "저장"}
+                      </button>
+                      <button
+                        className="icon-button"
+                        type="button"
+                        onClick={handleCopy}
+                        disabled={!reviewConfirmed}
+                        aria-label={`${channelLabels[activeChannel]} 초안 복사`}
+                      >
+                        <Clipboard size={18} />
+                        {copyState}
+                      </button>
+                    </div>
                   </div>
                   <div className="channel-tabs" role="tablist" aria-label="초안 채널 선택">
                     <ChannelTab channel="homepage" activeChannel={activeChannel} icon={<Monitor size={18} />} onSelect={handleChannelSelect} />
@@ -621,8 +754,93 @@ function App() {
             </div>
           )}
         </section>
+
+        <section className="history-section" id="history" aria-label="저장된 공지">
+          <div className="panel-heading">
+            <div>
+              <p className="panel-kicker">로그인 기반 기억</p>
+              <h2>저장된 공지</h2>
+            </div>
+            <span className="status-pill">{user ? `${savedNotices.length}개 저장됨` : "로그인 필요"}</span>
+          </div>
+
+          {historyMessage && (
+            <div className="history-message" role="status">
+              <span>{historyMessage}</span>
+            </div>
+          )}
+
+          {!user ? (
+            <div className="empty-state compact">
+              <p>Google 로그인 후 생성한 공지 초안을 사용자별로 저장할 수 있습니다.</p>
+            </div>
+          ) : savedNotices.length ? (
+            <div className="history-list">
+              {savedNotices.map((notice) => (
+                <article className="history-card" key={notice.id}>
+                  <div>
+                    <span>{new Date(notice.createdAtMs).toLocaleString("ko-KR")}</span>
+                    <h3>{notice.title}</h3>
+                    <p>{notice.category}</p>
+                  </div>
+                  <button className="secondary-button" type="button" onClick={() => handleLoadSavedNotice(notice)}>
+                    불러오기
+                  </button>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state compact">
+              <p>아직 저장된 공지가 없습니다. 공지 초안을 만든 뒤 저장 버튼을 눌러 주세요.</p>
+            </div>
+          )}
+        </section>
       </div>
     </main>
+  );
+}
+
+function AuthPanel({
+  authReady,
+  firebaseEnabled,
+  user,
+  onLogin,
+  onLogout,
+}: {
+  authReady: boolean;
+  firebaseEnabled: boolean;
+  user: User | null;
+  onLogin: () => void;
+  onLogout: () => void;
+}) {
+  if (!authReady) {
+    return <span className="auth-loading">로그인 확인 중</span>;
+  }
+
+  if (!firebaseEnabled) {
+    return <span className="auth-loading">로컬 모드</span>;
+  }
+
+  if (!user) {
+    return (
+      <button className="auth-button" type="button" onClick={onLogin}>
+        <LogIn size={18} />
+        Google 로그인
+      </button>
+    );
+  }
+
+  return (
+    <div className="auth-panel">
+      {user.photoURL && <img src={user.photoURL} alt="" />}
+      <div>
+        <strong>{user.displayName || "로그인 사용자"}</strong>
+        <span>{user.email}</span>
+      </div>
+      <button className="auth-icon-button" type="button" onClick={onLogout} aria-label="로그아웃">
+        <LogOut size={18} />
+      </button>
+    </div>
   );
 }
 
