@@ -927,6 +927,9 @@ function ImageDraftPreview({ draft }: { draft: ImageDraft }) {
       <p className="visual-card-kicker">{draft.category}</p>
       <h4>{draft.title}</h4>
       <p className="visual-card-audience">대상 · {draft.audience}</p>
+      {draft.template === "informational" && (
+        <div className="visual-card-section-title"><span>한눈에 보는</span> 핵심 안내</div>
+      )}
       <div className="visual-card-highlight">
         <span>주요 혜택</span>
         <strong>{draft.benefit}</strong>

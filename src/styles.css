@@ -1371,9 +1371,27 @@ ul {
 }
 
 .visual-card.is-informational {
-  border-left: 6px solid #57bee8;
-  background: linear-gradient(#06315f 0 27%, #f5f8fc 27% 100%);
+  border: 1px solid #d9e5ef;
+  border-top: 6px solid #58c5ef;
+  background: linear-gradient(180deg, #052b57 0%, #0a568d 34%, #eef3f8 34%, #eef3f8 100%);
   color: #172333;
+}
+
+.visual-card.is-informational::after {
+  top: -74px;
+  right: -76px;
+  width: 190px;
+  height: 190px;
+  border: 18px solid rgba(143, 221, 255, 0.14);
+}
+
+.is-informational .visual-card-brand,
+.is-informational h4 {
+  color: #ffffff;
+}
+
+.is-informational h4 {
+  font-size: clamp(22px, 2.8vw, 29px);
 }
 
 .visual-card-brand {
@@ -1448,19 +1466,48 @@ ul {
 }
 
 .is-informational .visual-card-kicker {
-  margin-top: 24px;
-  color: #8edbff;
+  width: fit-content;
+  margin-top: 17px;
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: #55c6ef;
+  color: #052b57;
+  font-size: 9px;
 }
 
 .is-informational .visual-card-audience {
-  color: #d7efff;
+  margin-top: 7px;
+  border: 1px solid #c9dfea;
+  border-radius: 6px;
+  padding: 7px 9px;
+  background: #e8f3f9;
+  color: #173d63;
+  font-size: 10px;
 }
 
 .is-informational .visual-card-highlight {
-  margin-top: 12px;
-  border: 1px solid #dbe7f1;
-  background: #fff;
+  border: 1px solid #d7e5ef;
+  border-left: 4px solid #ffca38;
+  padding: 10px 12px;
+  background: #fff9e7;
   color: var(--ink);
+  box-shadow: 0 5px 12px rgba(19, 55, 88, 0.07);
+}
+
+.visual-card-section-title {
+  display: flex;
+  gap: 4px;
+  align-items: baseline;
+  margin: 11px 0 7px;
+  color: #173d63;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.visual-card-section-title span {
+  color: #678097;
+  font-size: 8px;
+  font-weight: 800;
 }
 
 .visual-card dl {
@@ -1482,8 +1529,22 @@ ul {
 }
 
 .is-informational dl > div {
-  border: 1px solid #dbe7f1;
+  position: relative;
+  grid-template-columns: 50px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid #d7e5ef;
   background: #fff;
+  box-shadow: 0 4px 10px rgba(19, 55, 88, 0.06);
+}
+
+.is-informational dl > div::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: #57bde6;
+  content: "";
 }
 
 .visual-card dt {
@@ -1493,7 +1554,13 @@ ul {
 }
 
 .is-informational .visual-card dt {
-  color: var(--blue);
+  display: inline-grid;
+  min-height: 25px;
+  place-items: center;
+  align-self: start;
+  border-radius: 5px;
+  background: #e6f4fc;
+  color: #0969a8;
 }
 
 .visual-card dd {
@@ -1516,8 +1583,14 @@ ul {
 }
 
 .is-informational footer {
-  background: #e8f1f8;
-  color: #173d63;
+  border-radius: 0;
+  margin-right: -24px;
+  margin-bottom: -24px;
+  margin-left: -24px;
+  padding: 11px 24px;
+  background: #06315f;
+  color: #d7f1ff;
+  text-align: center;
 }
 
 .image-guide {
