@@ -55,4 +55,7 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
         run: |
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$GOOGLE_APPLICATION_CREDENTIALS"
-          npx firebase-tools deploy --only firestore --project knu-team3-9d7b4 --non-interactive
+          npx firebase-tools deploy --only firestore --project knu-team3-9d7b4 --non-interactive || {
+            echo "::warning::Firestore rules/indexes deploy skipped or failed. The service account needs Service Usage Viewer plus Firestore rules/index permissions, or deploy Firestore manually with npm run deploy:firestore."
+            exit 0
+          }
