@@ -433,8 +433,8 @@ function App() {
 
   const handleLogout = async () => {
     setHistoryMessage("");
-    if (!auth) return;
     setSaveMessage("로그아웃했습니다. 현재 화면의 분석/복사는 가능하지만 저장된 공지는 계정에 연결되지 않습니다.");
+    if (!auth) return;
     await signOut(auth);
   };
 
