@@ -100,6 +100,7 @@ function App() {
   const [authReady, setAuthReady] = useState(false);
   const [savedNotices, setSavedNotices] = useState<SavedNotice[]>([]);
   const [historyMessage, setHistoryMessage] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -108,14 +109,18 @@ function App() {
       setUser(currentUser);
       setAuthReady(true);
       setHistoryMessage("");
+      setSaveMessage("");
 
       if (!currentUser) {
         setSavedNotices([]);
+        setSaveMessage("비로그인 상태입니다. 분석과 복사는 가능하지만 저장은 Google 로그인 후 사용할 수 있습니다.");
         return;
       }
 
       try {
-        setSavedNotices(await loadNoticeDrafts(currentUser.uid));
+        const notices = await loadNoticeDrafts(currentUser.uid);
+        setSavedNotices(notices);
+        setSaveMessage(`${currentUser.displayName || "로그인 사용자"} 계정으로 저장할 수 있습니다. 저장된 공지는 아래 목록에서 다시 불러옵니다.`);
       } catch {
         setHistoryMessage("저장된 공지를 불러오지 못했습니다. Firestore 설정을 확인해 주세요.");
       }
@@ -279,6 +284,7 @@ function App() {
     setImageStatus("");
     setError("");
     setHistoryMessage("");
+    setSaveMessage(user ? "분석 결과가 갱신되었습니다. 검토 후 저장하면 Firestore의 저장된 공지 목록에 추가됩니다." : "분석 결과가 갱신되었습니다. 비로그인 상태에서는 복사와 이미지 저장만 가능하고, 공지 저장은 로그인 후 가능합니다.");
 
     if (isProcessing) {
       setError("파일 처리가 끝난 뒤 내용을 정리해 주세요.");
@@ -308,6 +314,7 @@ function App() {
     setLoadedResult(null);
     setError("");
     setHistoryMessage("");
+    setSaveMessage(user ? "입력을 초기화했습니다. 새 공지를 만든 뒤 저장할 수 있습니다." : "입력을 초기화했습니다. 저장 기능은 Google 로그인 후 사용할 수 있습니다.");
     setActiveChannel("homepage");
     setCopyState("홈페이지 초안 복사");
     setReviewConfirmed(false);
@@ -381,27 +388,35 @@ function App() {
 
   const handleLogin = async () => {
     setHistoryMessage("");
+    setSaveMessage("");
     try {
       await signInWithPopup(auth, googleProvider);
     } catch {
       setHistoryMessage("Google 로그인에 실패했습니다. Firebase Authentication 설정을 확인해 주세요.");
+      setSaveMessage("로그인에 실패해 저장 기능을 사용할 수 없습니다. Firebase Authentication 설정을 확인해 주세요.");
     }
   };
 
   const handleLogout = async () => {
     setHistoryMessage("");
+    setSaveMessage("로그아웃했습니다. 현재 화면의 분석/복사는 가능하지만 저장된 공지는 계정에 연결되지 않습니다.");
     await signOut(auth);
   };
 
   const handleSave = async () => {
     if (!user) {
       setHistoryMessage("로그인해야 공지를 저장할 수 있습니다.");
+      setSaveMessage("저장하지 않았습니다. Google 로그인 후 저장하면 Firestore에 계정별 공지로 보관됩니다.");
       return;
     }
-    if (!post || !result) return;
+    if (!post || !result) {
+      setSaveMessage("저장할 공지 초안이 없습니다. 먼저 전체 내용 정리하기를 실행해 주세요.");
+      return;
+    }
 
     setIsSaving(true);
     setHistoryMessage("");
+    setSaveMessage("Firestore에 공지 초안을 저장하는 중입니다.");
     try {
       const saved = await saveNoticeDraft({
         userId: user.uid,
@@ -411,8 +426,10 @@ function App() {
       });
       setSavedNotices((current) => [saved, ...current]);
       setHistoryMessage("현재 공지 초안을 저장했습니다.");
+      setSaveMessage("저장되었습니다. 아래 저장된 공지 목록 맨 위에서 다시 불러올 수 있습니다.");
     } catch {
       setHistoryMessage("공지 저장에 실패했습니다. Firestore 권한과 규칙을 확인해 주세요.");
+      setSaveMessage("저장에 실패했습니다. Firestore 권한, 규칙, 네트워크 상태를 확인해 주세요.");
     } finally {
       setIsSaving(false);
     }
@@ -428,6 +445,7 @@ function App() {
     setCopyState("홈페이지 초안 복사");
     setImageStatus("");
     setHistoryMessage("저장된 공지를 현재 작업 화면으로 불러왔습니다.");
+    setSaveMessage("저장된 공지를 불러왔습니다. 수정 후 다시 저장하면 새 저장 항목으로 추가됩니다.");
   };
 
   return (
@@ -444,6 +462,7 @@ function App() {
             <span>Kangnam University Notice Helper</span>
           </div>
           <nav aria-label="서비스 메뉴">
+            <a href="#service">서비스소개</a>
             <a href="#input">자료입력</a>
             <a href="#result">추출결과</a>
             <a href="#history">저장공지</a>
@@ -453,21 +472,81 @@ function App() {
       </header>
 
       <div className="page-shell">
-        <section className="hero">
-          <div>
+        <section className="hero" id="service">
+          <div className="hero-intro">
             <p className="eyebrow">이메일·첨부파일 통합 공지 도우미</p>
             <h1>메일과 첨부파일의 핵심 정보를 한 번에</h1>
             <p className="hero-copy">
               이메일, 이미지, PDF, Word, Excel에서 내용을 추출하고 근거와 함께 채널별 공지 초안을 만듭니다.
             </p>
+            <div className="hero-actions">
+              <a className="primary-button" href="#input">
+                <FileText size={18} />
+                공지 만들기
+              </a>
+              <a className="secondary-button" href="#result">
+                <Sparkles size={18} />
+                결과 미리보기
+              </a>
+            </div>
+            <div className="hero-badges" aria-label="지원 입력 형식">
+              <span>메일 본문</span>
+              <span>PDF</span>
+              <span>DOCX</span>
+              <span>XLSX</span>
+              <span>이미지</span>
+              <span>붙여넣기</span>
+            </div>
           </div>
-          <div className="notice">
-            <Sparkles size={20} />
-            <span>
-              파일은 서버에 업로드하지 않고 현재 브라우저에서 처리합니다. 저장 버튼은 직접 입력한 메일 본문과 최종 공지 초안만 Firestore에 저장합니다.
-            </span>
+          <div className="landing-preview" aria-label="공지 변환 예시">
+            <div className="preview-mail">
+              <span>예시 메일</span>
+              <strong>2026 비교과 프로그램 신청 안내</strong>
+              <p>대상, 기간, 혜택, 신청 링크가 흩어진 메일과 첨부파일을 함께 분석합니다.</p>
+            </div>
+            <div className="preview-result-grid">
+              <div><span>대상</span><strong>재학생</strong></div>
+              <div><span>기간</span><strong>7.29-8.9</strong></div>
+              <div><span>혜택</span><strong>마일리지</strong></div>
+              <div><span>신청</span><strong>온라인 링크</strong></div>
+            </div>
+            <div className="preview-draft">
+              <span>홈페이지 공지 초안</span>
+              <p>[비교과] AI 역량 강화 프로그램 신청 안내</p>
+            </div>
           </div>
         </section>
+
+        <section className="mode-section" aria-label="로그인 상태별 기능 안내">
+          <div className="mode-heading">
+            <p className="panel-kicker">사용 상태</p>
+            <h2>저장은 Google 로그인 후 Firestore에 보관됩니다</h2>
+          </div>
+          <div className="mode-grid">
+            <div className={!user ? "mode-card is-active" : "mode-card"}>
+              <span>비로그인·게스트</span>
+              <strong>분석, 근거 확인, 초안 복사, PNG 저장 가능</strong>
+              <p>공지 저장은 하지 않습니다. 저장 버튼을 누르면 로그인 안내가 표시됩니다.</p>
+            </div>
+            <div className={user ? "mode-card is-active" : "mode-card"}>
+              <span>Google 로그인</span>
+              <strong>Firestore에 계정별 공지 저장·불러오기 가능</strong>
+              <p>저장된 공지는 화면 하단의 저장된 공지 목록에서 다시 불러옵니다.</p>
+            </div>
+            <div className="mode-card status-card">
+              <span>현재 상태</span>
+              <strong>{authReady ? (user ? "로그인됨 · 저장 가능" : "비로그인 · 저장 불가") : "로그인 상태 확인 중"}</strong>
+              <p>{user ? `${user.email || user.displayName || "현재 계정"}에 연결된 공지로 저장됩니다.` : "Google 로그인 버튼을 누르면 저장 기능이 열립니다."}</p>
+            </div>
+          </div>
+        </section>
+
+        <div className="notice">
+          <Sparkles size={20} />
+          <span>
+            파일은 서버에 업로드하지 않고 현재 브라우저에서 처리합니다. 저장 버튼은 직접 입력한 메일 본문과 최종 공지 초안만 Firestore에 저장합니다.
+          </span>
+        </div>
 
         <section className="input-workspace" id="input" aria-label="메일과 첨부파일 입력">
           <div className="input-panel">
@@ -662,7 +741,7 @@ function App() {
                     <div className="draft-actions">
                       <button className="secondary-button" type="button" onClick={handleSave} disabled={isSaving}>
                         <Save size={18} />
-                        {isSaving ? "저장 중" : "저장"}
+                        {user ? (isSaving ? "저장 중" : "Firestore 저장") : "로그인 후 저장"}
                       </button>
                       <button
                         className="icon-button"
@@ -680,6 +759,15 @@ function App() {
                     <ChannelTab channel="homepage" activeChannel={activeChannel} icon={<Monitor size={18} />} onSelect={handleChannelSelect} />
                     <ChannelTab channel="sns" activeChannel={activeChannel} icon={<Hash size={18} />} onSelect={handleChannelSelect} />
                     <ChannelTab channel="message" activeChannel={activeChannel} icon={<MessageCircle size={18} />} onSelect={handleChannelSelect} />
+                  </div>
+                  <div className={user ? "save-feedback is-signed-in" : "save-feedback is-guest"} role="status">
+                    <Save size={16} />
+                    <span>
+                      {saveMessage ||
+                        (user
+                          ? "저장하면 Firestore의 저장된 공지 목록에 추가됩니다."
+                          : "비로그인 상태에서는 공지가 저장되지 않습니다. Google 로그인 후 계정별로 저장할 수 있습니다.")}
+                    </span>
                   </div>
                   <label className="review-check">
                     <input
