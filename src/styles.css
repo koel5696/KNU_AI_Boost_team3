@@ -89,7 +89,12 @@
 
 .landing-brand {
   gap: 11px;
+  border: 0;
+  padding: 0;
+  background: transparent;
   color: #201b41;
+  cursor: pointer;
+  font: inherit;
   text-decoration: none;
 }
 
@@ -2722,7 +2727,12 @@ ul {
   display: inline-flex;
   gap: 11px;
   align-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
   color: #201b41;
+  cursor: pointer;
+  font: inherit;
   text-decoration: none;
 }
 
@@ -3833,7 +3843,12 @@ ul {
   display: inline-flex;
   gap: 11px;
   align-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
   color: #201b41;
+  cursor: pointer;
+  font: inherit;
   text-decoration: none;
 }
 
