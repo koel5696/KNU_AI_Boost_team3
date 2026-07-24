@@ -1,5 +1,7 @@
 export type ExtractedInfo = {
+  title: string;
   category: string;
+  description: string;
   audience: string;
   period: string;
   benefit: string;
@@ -15,12 +17,14 @@ export type HomepagePost = {
 };
 
 export type SnsPost = {
+  title: string;
   body: string;
   hashtags: string;
   copyText: string;
 };
 
 export type MessageDraft = {
+  title: string;
   body: string;
   copyText: string;
 };
@@ -33,6 +37,7 @@ const AUDIENCE_NOUN_PATTERN = /(강남대학교\s*)?(재학생|휴학생|대학�
 const ORGANIZATION_PATTERN = /센터|팀|재단|기관|사무국|운영팀|지원센터|네트워크|연구원|협회|그룹/;
 const OMITTED_YEAR_DOTTED_RANGE_PATTERN =
   /(20\d{2})\s*[.]\s*(\d{1,2})\s*[.]\s*(\d{1,2})\s*[.]?\s*(?:\([^)]*\))?\s*~\s*(?:(20\d{2})\s*[.]\s*)?(\d{1,2})\s*[.]\s*(\d{1,2})\s*[.]?/;
+const URL_PATTERN = /https?:\/\/[^\s<>"')\]|]+/i;
 
 export const sampleMail = `제목: 청년 대상 AI 직무교육 참가자 모집
 
@@ -69,7 +74,22 @@ function bodyOnly(text: string) {
     .join("\n");
 }
 
+function extractTitle(text: string) {
+  return (
+    lineValue(text, ["제목", "Subject"]) ||
+    firstMatch(text, [
+      /^\s*<\s*([^>\n]{4,80})\s*>/m,
+      /^\s*[「『]\s*([^」』\n]{4,80})\s*[」』]/m,
+    ])
+  )
+    .replace(/^제목\s*[:：]\s*/i, "")
+    .replace(/[<>「」『』]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function inferCategory(text: string) {
+  if (/부스트\s*캠프|부트\s*캠프|boost\s*camp|스프린트|해커톤|AI\s*활용|Codex/i.test(text)) return "AI 교육/부트캠프";
   if (/변경|연장|재안내|수정/.test(text)) return "변경/재안내";
   if (/봉사|자원봉사/.test(text)) return "봉사";
   if (/창업|경진대회|공모전|아이디어|챌린지/.test(text)) return "창업/경진대회";
@@ -82,8 +102,85 @@ export function inferCategory(text: string) {
   return "";
 }
 
+function sectionValue(text: string, labels: string[]) {
+  const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  for (let index = 0; index < lines.length; index += 1) {
+    const normalizedLine = lines[index].replace(/^[■※*\-·•\s]+/, "").trim();
+    if (!labels.some((label) => new RegExp(`^${label}\\b`, "i").test(normalizedLine))) continue;
+
+    const values: string[] = [];
+    for (let cursor = index + 1; cursor < lines.length && values.length < 5; cursor += 1) {
+      const next = lines[cursor].replace(/^[■※*\-·•\s]+/, "").trim();
+      if (/^(참여대상|모집 대상|운영기간|세부일정|교육내용|수료기준|참가 신청|신청 방법|문의|행사 개요|일정|참가 혜택|참가 제한)\b/i.test(next)) break;
+      if (next) values.push(next);
+    }
+    if (values.length) return values.join(" ");
+  }
+  return "";
+}
+
+function cleanDescription(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function sentenceForNotice(value: string) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  const labeled = normalized.match(/^(수료기준|참여대상|모집대상|운영기간|교육내용|행사\s*개요|참가\s*혜택)\s+(.+)$/);
+  if (labeled) {
+    const [, label, body] = labeled;
+    if (/수료기준/.test(label)) {
+      const requirements = body
+        .replace(/\s*(?:및|그리고)\s*/g, ", ")
+        .replace(/(출석|이수|완료|제출)\s+([가-힣A-Za-z0-9])/g, "$1, $2")
+        .replace(/\s+/g, " ");
+      return `수료기준은 ${requirements}해야 합니다.`;
+    }
+    if (/참여대상|모집대상/.test(label)) {
+      return `참여 대상은 ${body}입니다.`;
+    }
+    if (/운영기간/.test(label)) {
+      return `운영기간은 ${body}입니다.`;
+    }
+    if (/참가\s*혜택/.test(label)) {
+      return `참가 혜택은 ${body}입니다.`;
+    }
+    return `${body.replace(/[.!?。]?$/, "")}.`;
+  }
+  if (/(습니다|됩니다|드립니다|바랍니다|합니다|입니다|주세요)[.!?。]?$/.test(normalized)) {
+    return normalized.replace(/[.!?。]?$/, ".");
+  }
+  if (/(참여|출석|신청|제출)$/.test(normalized)) {
+    return `${normalized}해야 합니다.`;
+  }
+  if (/(가능|제공|지원|진행|운영|학습|제작|경험)$/.test(normalized)) {
+    return `${normalized}합니다.`;
+  }
+  return `${normalized}입니다.`;
+}
+
+function sameNoticeValue(left: string, right: string) {
+  const normalize = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/https?:\/\//g, "")
+      .replace(/[\s/|.,:：()[\]{}'"~-]/g, "")
+      .trim();
+  const leftValue = normalize(left);
+  const rightValue = normalize(right);
+  return Boolean(leftValue && rightValue && leftValue === rightValue);
+}
+
+function noticeTitle(info: ExtractedInfo) {
+  if (info.title) return info.title;
+  const category = info.category || "프로그램";
+  return `[${category}] 프로그램 안내`;
+}
+
 function cleanApplyMethod(value: string) {
   if (!value) return "";
+  const link = value.match(URL_PATTERN)?.[0];
+  if (link) return link;
   const sentence = value
     .split(/문의|연락|전화|이메일|메일|담당자/)
     .at(0)
@@ -199,24 +296,40 @@ function extractPeriod(text: string) {
 function cleanBenefit(value: string) {
   if (!value) return "";
   if (/지원할|지원자는|모집합니다|참가자 모집/.test(value)) return "";
-  return value.replace(/참가비는\s*없고?/, "참가비 없음").trim();
+  return value
+    .replace(/참가비는\s*없고?/, "참가비 없음")
+    .replace(/\s+/g, " ")
+    .replace(/\blif\s*:?/gi, "")
+    .trim();
 }
 
 function extractContact(text: string) {
   const phone = text.match(FULL_PHONE_PATTERN)?.[0];
   const email = text.match(EMAIL_PATTERN)?.[0];
   const extension = text.match(/내선(?:번호)?\s*[:：]?\s*(\d{3,4})/)?.[1];
-  return phone || email || (extension ? `내선 ${extension}` : "");
+  const inquiryLine = text.split(/\n+/).find((line) => /문의|contact/i.test(line));
+  const link = inquiryLine?.match(URL_PATTERN)?.[0] ?? (/참가\s*신청\s*및\s*문의|신청\s*및\s*문의/.test(text) ? text.match(URL_PATTERN)?.[0] : "");
+  return phone || email || (extension ? `내선 ${extension}` : "") || link || "";
 }
 
 export function extractInfo(text: string): ExtractedInfo {
   const searchableText = bodyOnly(text);
   const labeledAudience = lineValue(text, ["모집 대상", "참가 대상", "참가 자격", "지원자", "Eligibility"]);
   const labeledBenefit = lineValue(text, ["참가 비용", "참가비", "시상 규모", "주요 혜택", "혜택"]);
-  const labeledApplyMethod = lineValue(text, ["신청 방법", "신청", "제출 방법", "신청 페이지"]);
+  const labeledApplyMethod = lineValue(text, ["신청 방법", "참가 신청 및 문의", "신청 및 문의", "신청", "제출 방법", "신청 페이지"]);
+  const description = cleanDescription(
+    sectionValue(searchableText, ["교육내용", "행사 개요", "프로그램 내용", "주요 내용"]) ||
+      firstMatch(searchableText, [
+        /(AI\s*활용[^.\n]*(?:프로그램|제작|학습)[^.\n]*)/,
+        /(기초부터\s*프로젝트\s*완성까지[^.\n]*)/,
+        /(현직[^.\n]*(?:특강|콘서트|멘토링)[^.\n]*)/,
+      ]),
+  );
 
   return {
+    title: extractTitle(text),
     category: inferCategory(text),
+    description,
     audience: normalizeAudience(labeledAudience || firstMatch(searchableText, [
       /(서울\s*거주\s*만\s*[0-9]{1,2}세\s*[~-]\s*[0-9]{1,2}세\s*[^.\n,]*)/,
       /(전국\s*대학생)/,
@@ -237,6 +350,10 @@ export function extractInfo(text: string): ExtractedInfo {
     ])),
     period: extractPeriod(searchableText),
     benefit: cleanBenefit(labeledBenefit || firstMatch(searchableText, [
+      /(재맞고\s*20시간\s*인정[^.\n]*)/,
+      /(팀[·・ㆍ.]?개인별\s*교육\s*및\s*멘토링\s*제공[^.\n]*)/,
+      /(총\s*[0-9,]+\s*만\s*원\s*상당\s*시상품\s*제공[^.\n]*)/,
+      /(ChatGPT\s*[+·・ㆍ.]?\s*Codex\s*인당\s*플랜\s*[0-9]+\s*계정\s*제공[^.\n]*)/,
       /(상금[^.\n]*)/,
       /(총상금[^.\n]*)/,
       /(장학금\s*[0-9,]+\s*만\s*원[^.\n]*)/,
@@ -273,49 +390,54 @@ export function extractInfo(text: string): ExtractedInfo {
 export function buildDraft(info: ExtractedInfo) {
   const titleAudience = info.audience || "관심 있는 학생 및 지역 청년";
   const titleCategory = info.category || "프로그램";
+  const description = sentenceForNotice(info.description || `${titleCategory} 프로그램`);
   const period = info.period || NEEDS_REVIEW;
   const benefit = info.benefit || NEEDS_REVIEW;
   const apply = info.applyMethod || NEEDS_REVIEW;
   const contact = info.contact || NEEDS_REVIEW;
+  const mergedApplyContact = sameNoticeValue(apply, contact);
 
   return `${titleAudience} 대상 ${titleCategory} 참가자를 모집합니다.
 
+${description}
+
 기간은 ${period}이며, ${benefit}로 운영됩니다.
-참여를 희망하는 분은 ${apply}을 확인해 신청해 주세요.
-자세한 문의는 ${contact}로 연락해 주시기 바랍니다.`;
+${mergedApplyContact
+  ? `참여를 희망하거나 문의가 있는 경우 ${apply}을 확인해 주세요.`
+  : `참여를 희망하는 분은 ${apply}을 확인해 신청해 주세요.\n자세한 문의는 ${contact}로 연락해 주시기 바랍니다.`}`;
 }
 
 export function buildHomepagePost(info: ExtractedInfo): HomepagePost {
   const category = info.category || "일반공지";
+  const description = info.description ? sentenceForNotice(info.description) : NEEDS_REVIEW;
   const audience = normalizeAudience(info.audience) || NEEDS_REVIEW;
   const period = info.period || NEEDS_REVIEW;
   const benefit = info.benefit || NEEDS_REVIEW;
   const applyMethod = info.applyMethod || NEEDS_REVIEW;
   const contact = info.contact || NEEDS_REVIEW;
-  const title = audience === NEEDS_REVIEW
-    ? `[${category}] 프로그램 안내`
-    : `[${category}] ${audience} 대상 프로그램 안내`;
+  const title = noticeTitle(info);
+  const mergedApplyContact = sameNoticeValue(applyMethod, contact);
+  const applyContactSection = mergedApplyContact
+    ? `5. 신청 방법 및 문의\n${applyMethod}`
+    : `5. 신청 방법\n${applyMethod}\n\n6. 문의\n${contact}`;
 
   const body = `안녕하세요.
 
 다음과 같이 ${category} 프로그램을 안내하오니 관심 있는 분들의 많은 참여 바랍니다.
 
-1. 대상
+1. 프로그램 개요
+${description}
+
+2. 대상
 ${audience}
 
-2. 기간
+3. 기간
 ${period}
 
-3. 주요 혜택
+4. 주요 혜택
 ${benefit}
 
-4. 신청 방법
-${applyMethod}
-
-5. 문의
-${contact}
-
-※ 본 공지는 공유 메일을 바탕으로 정리한 예시 초안입니다. 게시 전 원문과 필수 항목을 반드시 확인해 주세요.`;
+${applyContactSection}`;
 
   return {
     title,
@@ -337,20 +459,22 @@ function hashtagValue(value: string) {
 }
 
 export function buildSnsPost(info: ExtractedInfo): SnsPost {
-  const category = compactValue(info.category || "프로그램");
+  const title = noticeTitle(info);
+  const description = compactValue(sentenceForNotice(info.description));
   const audience = compactValue(normalizeAudience(info.audience));
   const period = compactValue(info.period);
   const benefit = compactValue(info.benefit);
   const applyMethod = compactValue(info.applyMethod);
   const contact = compactValue(info.contact);
+  const mergedApplyContact = sameNoticeValue(applyMethod, contact);
 
-  const body = `📢 ${category} 참여자를 모집합니다!
+  const body = `📢 ${title}
 
+📝 개요: ${description}
 🙋 대상: ${audience}
 📅 기간: ${period}
 🎁 혜택: ${benefit}
-✅ 신청: ${applyMethod}
-☎️ 문의: ${contact}
+${mergedApplyContact ? `✅ 신청 및 문의: ${applyMethod}` : `✅ 신청: ${applyMethod}\n☎️ 문의: ${contact}`}
 
 관심 있는 분들의 많은 참여 바랍니다.`;
 
@@ -358,6 +482,7 @@ export function buildSnsPost(info: ExtractedInfo): SnsPost {
   const hashtags = `#강남대학교 #${categoryTag} #대학생활 #참여자모집`;
 
   return {
+    title,
     body,
     hashtags,
     copyText: `${body}\n\n${hashtags}`,
@@ -366,17 +491,22 @@ export function buildSnsPost(info: ExtractedInfo): SnsPost {
 
 export function buildMessageDraft(info: ExtractedInfo): MessageDraft {
   const category = info.category || "프로그램";
+  const title = noticeTitle(info);
+  const description = info.description ? sentenceForNotice(info.description) : NEEDS_REVIEW;
   const audience = normalizeAudience(info.audience) || NEEDS_REVIEW;
   const period = info.period || NEEDS_REVIEW;
   const applyMethod = info.applyMethod || NEEDS_REVIEW;
   const contact = info.contact || NEEDS_REVIEW;
+  const mergedApplyContact = sameNoticeValue(applyMethod, contact);
 
   const body = `[강남대학교 ${category} 안내]
+${title}
+
+개요: ${description}
 대상: ${audience}
 기간: ${period}
-신청: ${applyMethod}
-문의: ${contact}
+${mergedApplyContact ? `신청 및 문의: ${applyMethod}` : `신청: ${applyMethod}\n문의: ${contact}`}
 ※ 자세한 내용은 학교 홈페이지 공지를 확인해 주세요.`;
 
-  return { body, copyText: body };
+  return { title, body, copyText: body };
 }

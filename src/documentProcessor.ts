@@ -41,7 +41,7 @@ export const ACCEPTED_FILE_TYPES = [
   ".heif",
 ].join(",");
 
-const URL_PATTERN = /https?:\/\/[^\s<>"')\]]+/gi;
+const URL_PATTERN = /https?:\/\/[^\s<>"')\]|]+/gi;
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;

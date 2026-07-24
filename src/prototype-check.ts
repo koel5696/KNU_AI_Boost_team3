@@ -19,6 +19,7 @@ assert(!post.copyText.includes("신청 방법\n운영기관 홈페이지에서 �
 assert(!post.copyText.includes("모집합니다을 대상으로"), "홈페이지 게시글 대상 문장 결합 오류");
 assert(!post.copyText.includes("습니다을 대상으로"), "홈페이지 게시글 종결어미 결합 오류");
 assert(!post.copyText.includes("참여 대상 대상"), "홈페이지 게시글 제목 대상 중복 오류");
+assert(!post.title.includes(normal.audience), "홈페이지 게시글 제목에 대상 조건이 섞이면 안 됩니다.");
 
 const emptyMessage =
   "메일 내용을 입력해 주세요. 공유 메일 본문이나 제목을 붙여넣으면 예시 추출 결과를 만들 수 있습니다.";
@@ -47,6 +48,7 @@ assert(competition.contact === "02-9876-5432", "창업 경진대회 입력에서
 assert(competitionPost.copyText.includes("제목:"), "창업 경진대회 홈페이지 게시글 생성 실패");
 assert(!competitionPost.copyText.includes("있습니다을 대상으로"), "창업 경진대회 게시글 대상 문장 결합 오류");
 assert(!competitionPost.copyText.includes("참여 대상 대상"), "창업 경진대회 게시글 제목 대상 중복 오류");
+assert(!competitionPost.title.includes("2~4인"), "홈페이지 게시글 제목에 선발 조건이 섞이면 안 됩니다.");
 
 const researchInternMail = `제목: 2026 하반기 연구인턴 공개모집
 
@@ -64,5 +66,41 @@ const researchInternMail = `제목: 2026 하반기 연구인턴 공개모집
 const research = extractInfo(researchInternMail);
 assert(research.period === "2026.08.03. 09:00부터 2026.08.21. 17:00까지", "연구인턴 입력에서 접수 기간 우선 추출 실패");
 assert(!research.period.includes("9월 14일"), "연구인턴 입력에서 근무 기간을 기간으로 잘못 추출");
+
+const sameApplyContact = buildHomepagePost({
+  title: "",
+  category: "AI 교육/부트캠프",
+  description: "전공과 관계없이 누구나 참여 가능한 AI 활용 문제해결 및 제품 제작 프로그램",
+  audience: "강남대학교 재학생 30명 선발",
+  period: "2026-07-13 ~ 2026-07-25",
+  benefit: "교육 및 멘토링 제공",
+  applyMethod: "https://ai-boost.gdg-kangnam.site",
+  contact: "https://ai-boost.gdg-kangnam.site",
+});
+assert(sameApplyContact.title === "[AI 교육/부트캠프] 프로그램 안내", "제목은 핵심 유형만 간결하게 사용해야 합니다.");
+assert(sameApplyContact.copyText.includes("5. 신청 방법 및 문의\nhttps://ai-boost.gdg-kangnam.site"), "동일한 신청/문의 값은 초안에서 합쳐져야 합니다.");
+assert(!sameApplyContact.copyText.includes("6. 문의\nhttps://ai-boost.gdg-kangnam.site"), "동일한 신청/문의 값이 중복 출력되면 안 됩니다.");
+assert(sameApplyContact.copyText.includes("제품 제작 프로그램입니다."), "프로그램 설명은 공지 문체의 문장으로 끝나야 합니다.");
+
+const explicitTitlePost = buildHomepagePost(extractInfo(`<2026 강냉 AI 부스트캠프>
+
+■ 교육내용
+AI 활용 문제해결 및 제품 제작 프로그램입니다.
+
+■ 참가 신청 및 문의
+https://ai-boost.gdg-kangnam.site`));
+assert(explicitTitlePost.title === "2026 강냉 AI 부스트캠프", "명시된 원문 제목은 공지 제목에 우선 반영되어야 합니다.");
+
+const criteriaPost = buildHomepagePost({
+  title: "수료 기준 테스트",
+  category: "교육/직무훈련",
+  description: "수료기준 온라인 교육 70% 이상 출석 경진대회 당일 참여",
+  audience: "재학생",
+  period: "2026-07-13 ~ 2026-07-25",
+  benefit: "교육 제공",
+  applyMethod: "홈페이지 신청",
+  contact: "운영팀 문의",
+});
+assert(criteriaPost.copyText.includes("수료기준은 온라인 교육 70% 이상 출석, 경진대회 당일 참여해야 합니다."), "라벨 문맥이 있는 설명은 자연스러운 공지 문장으로 정리되어야 합니다.");
 
 console.log("prototype-check: 정상 입력, 빈 입력 안내, 다시 입력/복사 대상 확인 통과");

@@ -43,7 +43,9 @@ type PeriodCandidate = FieldCandidate & {
 };
 
 export const fieldLabels: Record<ExtractedKey, string> = {
+  title: "제목",
   category: "유형",
+  description: "프로그램 설명",
   audience: "대상",
   period: "기간",
   benefit: "주요 혜택",
@@ -54,7 +56,8 @@ export const fieldLabels: Record<ExtractedKey, string> = {
 const keys = Object.keys(fieldLabels) as ExtractedKey[];
 const NEEDS_REVIEW = "담당자 확인 필요";
 const GENERIC_EVIDENCE = "규칙 기반으로 문서에서 감지됨";
-const URL_PATTERN = /https?:\/\/[^\s<>"')\]]+/gi;
+const URL_PATTERN = /https?:\/\/[^\s<>"')\]|]+/gi;
+const SINGLE_URL_PATTERN = /https?:\/\/[^\s<>"')\]|]+/i;
 const PHONE_PATTERN = /0\d{1,2}-\d{3,4}-\d{4}/;
 const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 const AUDIENCE_NOUN_PATTERN = /(강남대학교\s*)?(재학생|휴학생|대학생|대학원생|학부생|신입생|졸업생|청년|교직원|지역\s*주민)/g;
@@ -67,7 +70,9 @@ const ENGLISH_DATE_RANGE_PATTERN =
   /([A-Z][a-z]+\s+\d{1,2})\s*[–-]\s*(\d{1,2}),\s*(20\d{2})(?:,\s*[^.\n]*)?/;
 
 const labelHints: Record<ExtractedKey, string[]> = {
+  title: ["제목", "Subject"],
   category: ["유형", "분류", "카테고리"],
+  description: ["프로그램 설명", "교육내용", "행사 개요", "프로그램 내용", "주요 내용"],
   audience: ["모집 대상", "참가 대상", "지원 대상", "지원 자격", "대상", "Eligibility"],
   period: [
     "신청 기간",
@@ -84,8 +89,8 @@ const labelHints: Record<ExtractedKey, string[]> = {
     "Application Deadline",
   ],
   benefit: ["주요 혜택", "혜택", "참가 비용", "참가비", "지원 내용", "시상", "상금"],
-  applyMethod: ["신청 방법", "접수 방법", "제출 방법", "지원 방법", "신청 링크", "신청", "Apply"],
-  contact: ["문의", "문의처", "담당자", "연락처", "전화", "내선번호", "내선", "Contact"],
+  applyMethod: ["신청 방법", "접수 방법", "제출 방법", "지원 방법", "참가 신청 및 문의", "신청 및 문의", "신청 링크", "신청", "Apply"],
+  contact: ["문의", "문의처", "참가 신청 및 문의", "신청 및 문의", "담당자", "연락처", "전화", "내선번호", "내선", "Contact"],
 };
 
 function normalizeCandidate(value: string) {
@@ -133,6 +138,24 @@ function cleanAudienceValue(value: string) {
     .trim();
 }
 
+function cleanDescriptionValue(value: string) {
+  const compact = value
+    .replace(/\s+/g, " ")
+    .replace(/^[^0-9A-Za-z가-힣]+/, "")
+    .trim();
+  if (!compact || compact.length < 8) return "";
+  return compact;
+}
+
+function cleanBenefitValue(value: string) {
+  return value
+    .split(/\s*(?:참가 제한|모집 대상|일정|신청 QR|참가 신청|문의)\s*/)[0]
+    .replace(/(?:^|\s)lif\s*[:：]?/gi, " ")
+    .replace(/[•·]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function cleanContactValue(value: string) {
   const phone = value.match(PHONE_PATTERN)?.[0];
   if (phone) return phone;
@@ -140,6 +163,8 @@ function cleanContactValue(value: string) {
   if (email) return email;
   const extension = value.match(/내선(?:번호)?\s*[:：]?\s*(\d{3,4})/)?.[1];
   if (extension) return `내선 ${extension}`;
+  const link = value.match(SINGLE_URL_PATTERN)?.[0];
+  if (link) return link;
   return "";
 }
 
@@ -151,10 +176,18 @@ function cleanEvidenceForDisplay(key: ExtractedKey, value: string, evidence: str
     if (email) return `문의: ${email}`;
     const extension = value.match(/내선\s*(\d{3,4})/)?.[1] ?? evidence.match(/내선(?:번호)?\s*[:：]?\s*(\d{3,4})/)?.[1];
     if (extension) return `문의: 내선 ${extension}`;
+    const link = value.match(SINGLE_URL_PATTERN)?.[0] ?? evidence.match(SINGLE_URL_PATTERN)?.[0];
+    if (link) return `문의 링크: ${link}`;
   }
   if (key === "audience") {
     const audience = cleanAudienceValue(value || evidence);
     if (audience && /안녕하세요|반갑습니다|초대합니다/.test(evidence)) return `대상: ${audience}`;
+  }
+  if (key === "benefit") {
+    return cleanBenefitValue(evidence || value);
+  }
+  if (key === "category") {
+    return value;
   }
   return evidence;
 }
@@ -181,6 +214,35 @@ function findEvidence(lines: string[], value: string) {
     }
   }
   return bestScore > 0 ? best : GENERIC_EVIDENCE;
+}
+
+function categoryEvidence(lines: string[], category: string) {
+  const contentLines = lines.filter((line) => !/^\s*(?:제목|Subject)\s*[:：]/i.test(line) && !/^\s*[<「『]/.test(line));
+  const categoryPatterns: Array<[RegExp, Array<[RegExp, number]>]> = [
+    [/AI 교육|부트캠프/i, [[/AI\s*활용|Codex|부스트\s*캠프|부트\s*캠프/i, 4], [/해커톤/i, 3], [/스프린트/i, 1]]],
+    [/변경|재안내/i, [[/변경|연장|재안내|수정/i, 3]]],
+    [/봉사/i, [[/봉사|자원봉사/i, 3]]],
+    [/창업|경진대회/i, [[/창업|경진대회|공모전|아이디어|챌린지/i, 3]]],
+    [/행사|특강/i, [[/토크콘서트|행사|특강|콘서트/i, 3]]],
+    [/인턴|연구/i, [[/인턴|연구/i, 3]]],
+    [/교육|직무훈련/i, [[/교육|강의|직무|훈련|프로그램/i, 3]]],
+    [/모집/i, [[/모집|참가자|신청|participants|application|eligibility/i, 2]]],
+    [/지원|혜택/i, [[/장학|지원금|혜택/i, 3]]],
+  ];
+  const patterns = categoryPatterns.find(([categoryPattern]) => categoryPattern.test(category))?.[1];
+  if (patterns) {
+    let best = "";
+    let bestScore = 0;
+    for (const line of contentLines) {
+      const score = patterns.reduce((sum, [pattern, weight]) => sum + (pattern.test(line) ? weight : 0), 0);
+      if (score > bestScore) {
+        best = line;
+        bestScore = score;
+      }
+    }
+    if (best) return best;
+  }
+  return contentLines.find((line) => /모집|교육|행사|프로그램|신청|대상|혜택|지원|참가/i.test(line)) ?? GENERIC_EVIDENCE;
 }
 
 function candidate(
@@ -228,12 +290,73 @@ function collectLabeledCandidates(context: SourceContext, key: ExtractedKey) {
   return results;
 }
 
+const SECTION_HEADER_PATTERN =
+  /^(?:[■※*\-·•\s]+)?(참여대상|모집 대상|참가 대상|운영기간|세부일정|교육내용|행사 개요|프로그램 내용|주요 내용|참가 혜택|주요 혜택|혜택|참가 신청 및 문의|신청 및 문의|신청 방법|문의|문의처|신청 QR|일정|모집 대상|참가 제한)\s*[:：]?$/i;
+
+const sectionHints: Partial<Record<ExtractedKey, string[]>> = {
+  description: ["교육내용", "행사 개요", "프로그램 내용", "주요 내용"],
+  audience: ["참여대상", "모집 대상", "참가 대상"],
+  period: ["운영기간", "일정"],
+  benefit: ["참가 혜택", "주요 혜택", "혜택"],
+  applyMethod: ["참가 신청 및 문의", "신청 및 문의", "신청 방법", "신청 QR"],
+  contact: ["참가 신청 및 문의", "신청 및 문의", "문의", "문의처"],
+};
+
+function sectionHeaderOf(line: string) {
+  return line.replace(/^[■※*\-·•\s]+/, "").trim().match(SECTION_HEADER_PATTERN)?.[1] ?? "";
+}
+
+function cleanSectionLine(line: string) {
+  return line
+    .replace(/^[■※*\-·•\s]+/, "")
+    .replace(/\s*[|｜]\s*$/, "")
+    .trim();
+}
+
+function collectSectionCandidates(context: SourceContext, key: ExtractedKey) {
+  const labels = sectionHints[key];
+  if (!labels?.length) return [];
+
+  const results: FieldCandidate[] = [];
+  for (let index = 0; index < context.lines.length; index += 1) {
+    const header = sectionHeaderOf(context.lines[index]);
+    if (!header || !labels.some((label) => header.toLowerCase() === label.toLowerCase())) continue;
+
+    const values: string[] = [];
+    for (let cursor = index + 1; cursor < context.lines.length && values.length < 6; cursor += 1) {
+      if (sectionHeaderOf(context.lines[cursor])) break;
+      const value = cleanSectionLine(context.lines[cursor]);
+      if (value) values.push(value);
+    }
+    if (!values.length) continue;
+
+    const joined = values.join(" ");
+    const link = joined.match(SINGLE_URL_PATTERN)?.[0] ?? "";
+    const evidence = values.find((item) => (link ? item.includes(link) : item === values[0])) ?? joined;
+    const rawValue = key === "applyMethod" || key === "contact"
+      ? link || joined
+      : key === "benefit"
+        ? values.slice(0, 4).join(" / ")
+        : joined;
+    const value = cleanFieldValue(key, rawValue);
+    if (!value) continue;
+    const confidence = key === "benefit" || key === "description" ? 0.94 : 0.9;
+    const item = candidate(context, key, value, confidence, evidence);
+    results.push(key === "period" ? ({ ...item, periodKind: "event" } as PeriodCandidate) : item);
+  }
+  return results;
+}
+
 function cleanFieldValue(key: ExtractedKey, value: string) {
   let cleaned = value.replace(/\s+/g, " ").trim();
+  if (key === "description") cleaned = cleanDescriptionValue(cleaned);
   if (key === "audience") cleaned = cleanAudienceValue(cleaned);
+  if (key === "benefit") cleaned = cleanBenefitValue(cleaned);
   if (key === "contact") cleaned = cleanContactValue(cleaned);
   if (key === "period") cleaned = normalizeDatePhrase(cleaned);
   if (key === "applyMethod") {
+    const link = cleaned.match(SINGLE_URL_PATTERN)?.[0];
+    if (link) return link;
     cleaned = cleaned
       .replace(/문의.*$/, "")
       .replace(/담당자(?!\s*이메일\s*접수).*$/, "")
@@ -307,7 +430,7 @@ function extractDatePhrase(line: string) {
   return normalizeDatePhrase(`${matches[0]}${suffix}`);
 }
 
-const DATE_RANGE_PATTERN = /20\d{2}[.]\s*\d{1,2}[.]\s*\d{1,2}\s*~\s*20\d{2}[.]\s*\d{1,2}[.]\s*\d{1,2}/g;
+const DATE_RANGE_PATTERN = /20\d{2}[.]\s*\d{1,2}[.]\s*\d{1,2}\s*~\s*20\d{2}[.]\s*\d{1,2}[.]\s*\d{1,2}/;
 const TABLE_HEADER_WORDS = /주제|집단상담명|프로그램명|기간|시간|총시간|인원|내용|방식|대상|신청|문의|QR/i;
 
 function cleanScheduleWhitespace(value: string) {
@@ -437,7 +560,7 @@ function combinePeriodValue(candidates: PeriodCandidate[]) {
       value: event.value,
       selected: event,
       selectedGroup: [event],
-      hasConflict: Boolean(application && normalizeCandidate(application.value) !== normalizeCandidate(event.value)),
+      hasConflict: false,
       confidence: event.confidence,
     };
   }
@@ -458,10 +581,70 @@ function combinePeriodValue(candidates: PeriodCandidate[]) {
         value: selected.value,
         selected,
         selectedGroup: ranked.filter((item) => normalizeCandidate(item.value) === normalizeCandidate(selected.value)),
-        hasConflict: ranked.some((item) => normalizeCandidate(item.value) !== normalizeCandidate(selected.value)),
+        hasConflict: false,
         confidence: selected.confidence,
       }
     : null;
+}
+
+function mergeDistinctFieldValues(values: string[]) {
+  const merged: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const normalized = normalizeCandidate(trimmed);
+    const isDuplicate = merged.some((existing) => {
+      const existingNormalized = normalizeCandidate(existing);
+      return (
+        existingNormalized === normalized ||
+        existingNormalized.includes(normalized) ||
+        normalized.includes(existingNormalized)
+      );
+    });
+    if (isDuplicate) continue;
+    merged.push(trimmed);
+    if (merged.length >= 4) break;
+  }
+  return merged.join(" / ");
+}
+
+function simplifyLinkFieldValue(key: ExtractedKey, value: string) {
+  if (key !== "applyMethod" && key !== "contact") return value;
+  const links = value.match(URL_PATTERN);
+  if (!links?.length) return value;
+  return unique(links.map((link) => link.replace(/[|,.;]+$/, ""))).join(" / ");
+}
+
+function mergedValueForField(key: ExtractedKey, ranked: FieldCandidate[][], selected?: FieldCandidate) {
+  if (!selected) return "";
+  if (!["benefit", "applyMethod", "contact"].includes(key)) return selected.value;
+
+  const groupValues = ranked
+    .map((group) => [...group].sort((a, b) => b.confidence - a.confidence)[0])
+    .filter((item): item is FieldCandidate => Boolean(item) && item.confidence >= 0.52)
+    .map((item) => simplifyLinkFieldValue(key, item.value));
+
+  const linkValues =
+    key === "applyMethod" || key === "contact"
+      ? groupValues.filter((value) => SINGLE_URL_PATTERN.test(value))
+      : [];
+  const merged = mergeDistinctFieldValues(linkValues.length ? linkValues : groupValues);
+  return merged || simplifyLinkFieldValue(key, selected.value);
+}
+
+function displayCandidates(key: ExtractedKey, candidates: FieldCandidate[], selected?: FieldCandidate) {
+  if (!selected) return candidates.slice(0, 1);
+  const selectedHasLink = (key === "applyMethod" || key === "contact") && SINGLE_URL_PATTERN.test(selected.value);
+  if (selectedHasLink) return [selected];
+  const selectedComparable = selectedHasLink ? simplifyLinkFieldValue(key, selected.value) : selected.value;
+  const alternatives = candidates
+    .filter((item) => {
+      const comparable = selectedHasLink ? simplifyLinkFieldValue(key, item.value) : item.value;
+      return comparable !== selectedComparable;
+    })
+    .filter((item) => !selectedHasLink || SINGLE_URL_PATTERN.test(item.value))
+    .sort((a, b) => b.confidence - a.confidence);
+  return [selected, ...alternatives.slice(0, 1)];
 }
 
 function selectField(key: ExtractedKey, fieldCandidates: FieldCandidate[]): DetailedField {
@@ -477,8 +660,8 @@ function selectField(key: ExtractedKey, fieldCandidates: FieldCandidate[]): Deta
         sourceName: periodSelection.selected.sourceName,
         page: periodSelection.selected.page,
         evidence: periodSelection.selected.evidence,
-        candidates: usable,
-        hasConflict: periodSelection.hasConflict,
+        candidates: displayCandidates(key, usable, periodSelection.selected),
+        hasConflict: false,
       };
     }
   }
@@ -496,21 +679,22 @@ function selectField(key: ExtractedKey, fieldCandidates: FieldCandidate[]): Deta
   });
   const selectedGroup = ranked[0] ?? [];
   const selected = selectedGroup.sort((a, b) => b.confidence - a.confidence)[0];
-  const hasConflict = ranked.length > 1;
   const confidence = selected
-    ? Math.max(0.35, Math.min(0.98, selected.confidence + (selectedGroup.length > 1 ? 0.06 : 0) - (hasConflict ? 0.12 : 0)))
+    ? Math.max(0.35, Math.min(0.98, selected.confidence + (selectedGroup.length > 1 ? 0.06 : 0)))
     : 0;
+  const value = selected && confidence >= 0.52 ? mergedValueForField(key, ranked, selected) : "";
+  const displaySelected = selected && value ? { ...selected, value } : selected;
 
   return {
     key,
     label: fieldLabels[key],
-    value: selected && confidence >= 0.52 ? selected.value : "",
+    value,
     confidence,
     sourceName: selected?.sourceName ?? "",
     page: selected?.page,
     evidence: selected?.evidence ?? "",
-    candidates: usable,
-    hasConflict,
+    candidates: displayCandidates(key, usable, displaySelected),
+    hasConflict: false,
   };
 }
 
@@ -552,8 +736,17 @@ export function analyzeSources(manualText: string, processedSources: ProcessedSo
     const extracted = extractInfo(context.source.text);
     for (const key of keys) {
       const value = extracted[key];
-      if (value) candidates.get(key)?.push(candidate(context, key, cleanFieldValue(key, value), key === "category" ? 0.72 : 0.78));
+      if (value) {
+        candidates.get(key)?.push(candidate(
+          context,
+          key,
+          cleanFieldValue(key, value),
+          key === "category" ? 0.72 : 0.78,
+          key === "category" ? categoryEvidence(context.lines, value) : undefined,
+        ));
+      }
       candidates.get(key)?.push(...collectLabeledCandidates(context, key));
+      candidates.get(key)?.push(...collectSectionCandidates(context, key));
     }
 
     candidates.get("period")?.push(...collectPeriodCandidates(context));
@@ -579,7 +772,13 @@ export function analyzeSources(manualText: string, processedSources: ProcessedSo
     };
     for (const key of keys) {
       if (combined[key]) {
-        candidates.get(key)?.push(candidate(combinedContext, key, cleanFieldValue(key, combined[key]), 0.66));
+        candidates.get(key)?.push(candidate(
+          combinedContext,
+          key,
+          cleanFieldValue(key, combined[key]),
+          0.66,
+          key === "category" ? categoryEvidence(combinedContext.lines, combined[key]) : undefined,
+        ));
       }
     }
   }

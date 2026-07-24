@@ -78,6 +78,7 @@ type UploadItem = {
   progress: number;
   message: string;
   error?: string;
+  previewUrl?: string;
   sources: ProcessedSource[];
 };
 
@@ -114,6 +115,10 @@ function isDraftTexts(value: unknown): value is ChannelDraftTexts {
   if (!value || typeof value !== "object") return false;
   const draft = value as Partial<ChannelDraftTexts>;
   return channels.every((channel) => typeof draft[channel] === "string");
+}
+
+function isImageFileName(fileName: string) {
+  return /\.(png|jpe?g|webp|bmp|heic|heif)$/i.test(fileName);
 }
 
 function loadSessionDraft(): SessionDraftState | null {
@@ -201,6 +206,7 @@ function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [currentStep, setCurrentStep] = useState<WorkflowStep>(restoredSession?.currentStep ?? 1);
   const [copyReviewConfirmed, setCopyReviewConfirmed] = useState(restoredSession?.copyReviewConfirmed ?? false);
+  const [imagePreview, setImagePreview] = useState<{ fileName: string; url: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sessionSnapshotRef = useRef<SessionDraftState | null>(null);
   const isWorkspacePage = window.location.pathname.startsWith("/workspace");
@@ -267,6 +273,18 @@ function App() {
     (upload) => upload.status === "processing" || upload.status === "queued",
   );
   const result = analysis?.info ?? loadedResult;
+  const descriptionField = analysis?.fields.find((field) => field.key === "description") ?? (result
+    ? {
+        key: "description" as ExtractedKey,
+        label: fieldLabels.description,
+        value: result.description ?? "",
+        confidence: result.description ? 1 : 0,
+        sourceName: "",
+        evidence: "",
+        candidates: [],
+        hasConflict: false,
+      }
+    : null);
   const post = useMemo(() => (result ? buildHomepagePost(result) : null), [result]);
   const imageDraft = useMemo(
     () => (result ? buildImageDraft(result, channelLabels[activeChannel]) : null),
@@ -447,6 +465,7 @@ function App() {
       progress: 0,
       message: supportsFile(file) ? "처리 대기 중" : "지원하지 않는 파일 형식",
       error: supportsFile(file) ? undefined : "지원하지 않는 파일 형식입니다.",
+      previewUrl: isImageFileName(file.name) ? URL.createObjectURL(file) : undefined,
       sources: [],
     }));
     setUploads((current) => [...current, ...items]);
@@ -577,7 +596,11 @@ function App() {
   const handleReset = () => {
     clearSessionDraft();
     setMailText("");
+    uploads.forEach((upload) => {
+      if (upload.previewUrl) URL.revokeObjectURL(upload.previewUrl);
+    });
     setUploads([]);
+    setImagePreview(null);
     setAnalysis(null);
     setLoadedResult(null);
     setError("");
@@ -591,7 +614,12 @@ function App() {
   };
 
   const removeUpload = (id: string) => {
-    setUploads((current) => current.filter((upload) => upload.id !== id));
+    setUploads((current) => {
+      const target = current.find((upload) => upload.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      if (imagePreview?.url === target?.previewUrl) setImagePreview(null);
+      return current.filter((upload) => upload.id !== id);
+    });
     setAnalysis(null);
     setLoadedResult(null);
     setCopyReviewConfirmed(false);
@@ -749,9 +777,9 @@ function App() {
         <div className="landing-orbit landing-orbit-two" aria-hidden="true" />
 
         <nav className="landing-nav" aria-label="소개 페이지 메뉴">
-          <button className="landing-brand" type="button" onClick={returnToLandingTop} aria-label="KNU Notice AI 홈">
+          <button className="landing-brand" type="button" onClick={returnToLandingTop} aria-label="공지메이트 홈">
             <span aria-hidden="true">📣</span>
-            <strong>KNU Notice AI</strong>
+            <strong>공지메이트</strong>
           </button>
           <div className="landing-nav-links">
             <a href="#how-it-works">작동 방식</a>
@@ -764,7 +792,7 @@ function App() {
           <div className="landing-copy">
             <p className="landing-kicker">
               <Sparkles size={15} />
-              강남대학교 공지 제작 AI
+              강남대학교 공지메이트
             </p>
             <h1 id="landing-title">
               메일 한 통이
@@ -793,7 +821,7 @@ function App() {
             <div className="demo-window">
               <div className="demo-toolbar">
                 <div className="demo-dots" aria-hidden="true"><i /><i /><i /></div>
-                <span><Sparkles size={14} /> Notice AI가 공지를 만들고 있어요</span>
+                <span><Sparkles size={14} /> 공지메이트가 공지를 만들고 있어요</span>
                 <em>LIVE</em>
               </div>
 
@@ -917,9 +945,9 @@ function App() {
       {isWorkspacePage && <>
       <header className="site-header" id="notice-workspace">
         <div className="brand-bar">
-          <button className="workspace-brand" type="button" onClick={returnToLandingTop} aria-label="KNU Notice AI 첫 화면">
+          <button className="workspace-brand" type="button" onClick={returnToLandingTop} aria-label="공지메이트 첫 화면">
             <span aria-hidden="true">📣</span>
-            <strong>KNU Notice AI</strong>
+            <strong>공지메이트</strong>
           </button>
           <div className="workspace-context">
             <small>강남대학교</small>
@@ -1041,7 +1069,12 @@ function App() {
             {uploads.length > 0 && (
               <div className="upload-list" aria-label="업로드 파일 처리 상태">
                 {uploads.map((upload) => (
-                  <UploadRow key={upload.id} upload={upload} onRemove={removeUpload} />
+                  <UploadRow
+                    key={upload.id}
+                    upload={upload}
+                    onPreview={upload.previewUrl ? () => setImagePreview({ fileName: upload.fileName, url: upload.previewUrl || "" }) : undefined}
+                    onRemove={removeUpload}
+                  />
                 ))}
               </div>
             )}
@@ -1096,12 +1129,15 @@ function App() {
                 <div className="review-workspace">
                   <div className="review-summary" aria-label="추출 정보">
                     <h3 className="review-column-title">추출 정보</h3>
+                    {descriptionField && (
+                      <ProgramDescription field={descriptionField} onChange={updateField} />
+                    )}
                     <div className="info-grid" aria-label="추출된 핵심 정보">
                       {analysis
-                        ? analysis.fields.map((field) => (
+                        ? analysis.fields.filter((field) => field.key !== "description").map((field) => (
                             <EditableInfo key={field.key} field={field} onChange={updateField} />
                           ))
-                        : (Object.entries(result) as Array<[ExtractedKey, string]>).map(([key, value]) => (
+                        : (Object.entries(result) as Array<[ExtractedKey, string]>).filter(([key]) => key !== "description").map(([key, value]) => (
                             <EditableInfo
                               key={key}
                               field={{
@@ -1124,19 +1160,9 @@ function App() {
                       <span>
                         {missingItems.length
                           ? `누락 가능 항목: ${missingItems.join(", ")}. 원문 확인 후 입력해 주세요.`
-                          : "필수 항목이 모두 감지되었습니다. 각 근거와 충돌 여부를 확인해 주세요."}
+                          : "필수 항목이 모두 감지되었습니다. 각 근거와 내용을 확인해 주세요."}
                       </span>
                     </div>
-
-                    {analysis?.conflicts.length ? (
-                      <div className="conflict-box">
-                        <AlertTriangle size={19} />
-                        <div>
-                          <strong>서로 다른 정보가 발견되었습니다.</strong>
-                          <span>{analysis.conflicts.map((field) => field.label).join(", ")} 항목의 후보를 비교해 주세요.</span>
-                        </div>
-                      </div>
-                    ) : null}
                   </div>
 
                   <div className="review-evidence" aria-label="출처와 원문 근거">
@@ -1388,6 +1414,19 @@ function App() {
         </section>}
       </div>
       </>}
+      {imagePreview && (
+        <div className="image-preview-modal" role="dialog" aria-modal="true" aria-label={`${imagePreview.fileName} 미리보기`} onClick={() => setImagePreview(null)}>
+          <div className="image-preview-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="image-preview-head">
+              <strong>{imagePreview.fileName}</strong>
+              <button type="button" className="remove-file" onClick={() => setImagePreview(null)} aria-label="이미지 미리보기 닫기">
+                <X size={18} />
+              </button>
+            </div>
+            <img src={imagePreview.url} alt={`${imagePreview.fileName} 미리보기`} />
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -1447,7 +1486,15 @@ function GoogleIcon() {
   );
 }
 
-function UploadRow({ upload, onRemove }: { upload: UploadItem; onRemove: (id: string) => void }) {
+function UploadRow({
+  upload,
+  onPreview,
+  onRemove,
+}: {
+  upload: UploadItem;
+  onPreview?: () => void;
+  onRemove: (id: string) => void;
+}) {
   const Icon = upload.fileName.toLowerCase().endsWith(".eml")
     ? Mail
     : /\.(png|jpe?g|webp|bmp|heic|heif)$/i.test(upload.fileName)
@@ -1468,6 +1515,12 @@ function UploadRow({ upload, onRemove }: { upload: UploadItem; onRemove: (id: st
       </div>
       {upload.status === "done" && <CheckCircle2 className="success-icon" size={19} />}
       {upload.status === "error" && <AlertTriangle className="error-icon" size={19} />}
+      {onPreview && (
+        <button type="button" className="preview-file" onClick={onPreview} aria-label={`${upload.fileName} 이미지 보기`}>
+          <ImageIcon size={16} />
+          <span>보기</span>
+        </button>
+      )}
       <button type="button" className="remove-file" onClick={() => onRemove(upload.id)} aria-label={`${upload.fileName} 제거`}>
         <X size={17} />
       </button>
@@ -1475,10 +1528,26 @@ function UploadRow({ upload, onRemove }: { upload: UploadItem; onRemove: (id: st
   );
 }
 
+function ProgramDescription({ field, onChange }: { field: DetailedField; onChange: (key: ExtractedKey, value: string) => void }) {
+  const confidenceLabel = field.confidence >= 0.8 ? "높음" : field.confidence >= 0.6 ? "보통" : "낮음";
+  return (
+    <label className={`program-description-box ${field.value ? "" : "is-missing"}`}>
+      <span>{field.label}</span>
+      <textarea
+        value={field.value}
+        onChange={(event) => onChange(field.key, event.target.value)}
+        placeholder="프로그램의 목적과 내용을 공지 문체로 정리해 주세요."
+        rows={5}
+      />
+      <small className={`confidence confidence-${confidenceLabel}`}>신뢰도 {field.value ? confidenceLabel : "없음"}</small>
+    </label>
+  );
+}
+
 function EditableInfo({ field, onChange }: { field: DetailedField; onChange: (key: ExtractedKey, value: string) => void }) {
   const confidenceLabel = field.confidence >= 0.8 ? "높음" : field.confidence >= 0.6 ? "보통" : "낮음";
   return (
-    <label className={`info-card ${field.value ? "" : "is-missing"} ${field.hasConflict ? "has-conflict" : ""}`}>
+    <label className={`info-card ${field.value ? "" : "is-missing"}`}>
       <span>{field.label}</span>
       <input value={field.value} onChange={(event) => onChange(field.key, event.target.value)} placeholder="담당자 확인 필요" />
       <small className={`confidence confidence-${confidenceLabel}`}>신뢰도 {field.value ? confidenceLabel : "없음"}</small>
@@ -1490,7 +1559,7 @@ function EvidenceItem({ field }: { field: DetailedField }) {
   const alternatives = [...new Map(field.candidates.map((candidate) => [candidate.value, candidate])).values()]
     .filter((candidate) => candidate.value !== field.value);
   return (
-    <article className={field.hasConflict ? "evidence-item has-conflict" : "evidence-item"}>
+    <article className="evidence-item">
       <div className="evidence-head">
         <strong>{field.label}</strong>
         {!field.sourceName ? (

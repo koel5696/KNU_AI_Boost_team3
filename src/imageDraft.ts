@@ -16,6 +16,12 @@ const WIDTH = 1080;
 const HEIGHT = 1350;
 const FONT_FAMILY = 'Pretendard, "Noto Sans KR", "Malgun Gothic", sans-serif';
 
+function noticeTitle(info: ExtractedInfo) {
+  if (info.title) return info.title;
+  const category = info.category || "프로그램";
+  return `[${category}] 프로그램 안내`;
+}
+
 export function buildImageDraft(
   info: ExtractedInfo,
   channelLabel: string,
@@ -24,7 +30,7 @@ export function buildImageDraft(
   return {
     channelLabel,
     category,
-    title: `${category} 참여자를 모집합니다!`,
+    title: noticeTitle(info),
     audience: info.audience || NEEDS_REVIEW,
     period: info.period || NEEDS_REVIEW,
     benefit: info.benefit || NEEDS_REVIEW,

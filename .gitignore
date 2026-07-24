@@ -25,6 +25,7 @@ web_modules/
 dist/
 build/
 out/
+functions/lib/
 .next/
 .nuxt/
 .output/

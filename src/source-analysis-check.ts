@@ -162,4 +162,62 @@ const smallAssociationAnalysis = analyzeSources("다음 달에 취업 특강을 
 assert(smallAssociationAnalysis.info.period === "다음 달에", "정확한 날짜가 없으면 상대 기간을 보존해야 합니다.");
 assert(smallAssociationAnalysis.info.benefit === "참가비 없음", "참가비 없음 표현이 혜택으로 정리되어야 합니다.");
 
-console.log("source-analysis-check: 후보 랭킹, 날짜 정규화, 신청 링크 우선, 기간 분리, 이미지 표 다중 프로그램, 기관별 메일 변형 통과");
+const boostCampMail = `<2026 강냉 AI 부스트캠프>
+
+■ 참여대상
+강남대학교 재학생 30명 선발
+
+개인 신청, 스프린트는 팀 매칭
+※ 전공과 관계없이 누구나 참여 가능
+※ 단, G-RISE 사업 중복 참여 불가
+
+■ 운영기간
+2026년 7월 13일 ~ 7월 25일
+
+■ 교육내용
+AI 활용 경험이나 IT 지식이 없어도 기초부터 프로젝트 완성까지 단계별로 학습합니다. Codex를 활용해 실무 문제를 해결하는 웹·앱 기반 도구와 제품을 직접 제작하고, 고객 피드백을 기반으로 수정•고도화하는 과정을 경험합니다.
+
+■ 참가 신청 및 문의
+https://ai-boost.gdg-kangnam.site|`;
+
+const boostCampPoster: ProcessedSource = {
+  id: "boost-poster",
+  fileName: "boost.png",
+  kind: "image",
+  text: `2026 강냉 AI 부스트 캠프
+행사 개요
+전공과 관계없이 누구나 참여 가능한 AI 활용 문제해결 및 제품 제작 프로그램입니다.
+AI 활용 경험이나 IT 지식이 없어도 기초부터 프로젝트 완성까지, 단계별 교육을 통해 일상에서 발견한 문제들을 해결하는 웹, 앱 기반 도구 및 제품을 제작합니다.
+일정
+2026년 07월 13일 ~ 2026년 07월 25일
+온라인 교육 5회 13시 - 19시
+오프라인 경진대회 7.25 10시 - 20시
+참가 혜택
+재맞고 20시간 인정
+팀·개인별 교육 및 멘토링 제공
+총 270만 원 상당 시상품 제공
+ChatGPT+Codex 인당 플랜 2 계정 제공
+경진대회 당일 식사 및 다과 전체 지원
+모집 대상
+강남대학교 재학생 총 30명 선발
+참가 제한
+G-RISE 사업 중복 참여 불가
+신청 QR
+https://ai-boost.gdg-kangnam.site`,
+  size: 1000,
+  isOcr: true,
+  links: ["https://ai-boost.gdg-kangnam.site"],
+  qrCodes: ["https://ai-boost.gdg-kangnam.site"],
+  warnings: [],
+};
+
+const boostCampAnalysis = analyzeSources(boostCampMail, [boostCampPoster]);
+assert(boostCampAnalysis.info.category === "AI 교육/부트캠프", "AI 부스트캠프를 변경/재안내로 오분류하지 않아야 합니다.");
+assert(boostCampAnalysis.info.description.includes("AI 활용 문제해결") || boostCampAnalysis.info.description.includes("프로젝트 완성"), "프로그램 설명이 추출되어야 합니다.");
+assert(boostCampAnalysis.info.audience.includes("강남대학교 재학생 30명 선발"), "참여대상 섹션이 대상에 반영되어야 합니다.");
+assert(boostCampAnalysis.info.benefit.includes("270만 원") && boostCampAnalysis.info.benefit.includes("멘토링"), "포스터의 참가 혜택 섹션이 주요 혜택에 반영되어야 합니다.");
+assert(boostCampAnalysis.info.applyMethod === "https://ai-boost.gdg-kangnam.site", "신청 방법은 신청 링크로 정리되어야 합니다.");
+assert(boostCampAnalysis.info.contact === "https://ai-boost.gdg-kangnam.site", "문의처가 링크인 경우도 허용해야 합니다.");
+assert((boostCampAnalysis.fields.find((field) => field.key === "benefit")?.candidates.length ?? 0) <= 2, "근거 후보는 화면 표시용으로 최소화되어야 합니다.");
+
+console.log("source-analysis-check: 후보 랭킹, 날짜 정규화, 신청 링크 우선, 기간 분리, 이미지 표 다중 프로그램, 기관별 메일 변형, 포스터 섹션 분석 통과");
