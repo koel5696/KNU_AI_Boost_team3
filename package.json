@@ -8,7 +8,7 @@
     "deploy:firestore": "firebase deploy --only firestore",
     "deploy:all": "npm run build && firebase deploy",
     "lint": "eslint .",
-    "check:prototype": "tsx src/prototype-check.ts"
+    "check:prototype": "tsx src/prototype-check.ts && tsx src/source-analysis-check.ts"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",
