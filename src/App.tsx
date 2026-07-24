@@ -1167,6 +1167,7 @@ function App() {
                           {analysis.links.map((link) => (
                             <li key={link}>
                               <ExternalLink size={16} />
+                              <span>{describeLink(link, analysis)}</span>
                               <a href={link} target="_blank" rel="noreferrer">{link}</a>
                             </li>
                           ))}
@@ -1175,6 +1176,7 @@ function App() {
                             .map((code) => (
                               <li key={code}>
                                 <QrCode size={16} />
+                                <span>QR 링크</span>
                                 <span>{code}</span>
                               </li>
                             ))}
@@ -1424,6 +1426,14 @@ function AuthPanel({
       </button>
     </div>
   );
+}
+
+function describeLink(link: string, analysis: AnalysisResult) {
+  const applyField = analysis.fields.find((field) => field.key === "applyMethod");
+  if (applyField?.value.includes(link)) return "신청 링크";
+  if (analysis.qrCodes.includes(link)) return "QR 링크";
+  if (/forms\.gle|docs\.google\.com\/forms|form/i.test(link)) return "신청 링크";
+  return "참고 링크";
 }
 
 function GoogleIcon() {
