@@ -9,6 +9,8 @@ import {
 } from "react";
 import {
   AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
   CheckCircle2,
   Clipboard,
   Download,
@@ -59,12 +61,12 @@ import {
   buildImageDraft,
   downloadImageDraft,
   type ImageDraft,
-  type ImageTemplate,
 } from "./imageDraft";
 import { loadNoticeDrafts, saveNoticeDraft, type SavedNotice } from "./noticeHistory";
 
 type Channel = "homepage" | "sns" | "message";
 type UploadStatus = "queued" | "processing" | "done" | "error";
+type WorkflowStep = 1 | 2 | 3 | 4 | 5;
 
 type UploadItem = {
   id: string;
@@ -92,7 +94,6 @@ function App() {
   const [copyState, setCopyState] = useState("홈페이지 초안 복사");
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
   const [activeChannel, setActiveChannel] = useState<Channel>("homepage");
-  const [imageTemplate, setImageTemplate] = useState<ImageTemplate>("promotional");
   const [imageStatus, setImageStatus] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [user, setUser] = useState<User | null>(null);
@@ -100,9 +101,25 @@ function App() {
   const [savedNotices, setSavedNotices] = useState<SavedNotice[]>([]);
   const [historyMessage, setHistoryMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [currentStep, setCurrentStep] = useState<WorkflowStep>(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isWorkspacePage = window.location.pathname.startsWith("/workspace");
+
+  const moveToStep = (step: WorkflowStep) => {
+    if ((step === 2 || step === 3 || step === 4) && !result) return;
+    setCurrentStep(step);
+  };
+
+  const openWorkspace = () => {
+    window.location.assign("/workspace");
+  };
 
   useEffect(() => {
+    if (!auth) {
+      setAuthReady(true);
+      return;
+    }
+
     return onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       setAuthReady(true);
@@ -131,8 +148,8 @@ function App() {
   const result = analysis?.info ?? loadedResult;
   const post = useMemo(() => (result ? buildHomepagePost(result) : null), [result]);
   const imageDraft = useMemo(
-    () => (result ? buildImageDraft(result, channelLabels[activeChannel], imageTemplate) : null),
-    [activeChannel, imageTemplate, result],
+    () => (result ? buildImageDraft(result, channelLabels[activeChannel]) : null),
+    [activeChannel, result],
   );
 
   const channelDrafts = useMemo(() => {
@@ -280,6 +297,7 @@ function App() {
     try {
       setLoadedResult(null);
       setAnalysis(analyzeSources(mailText, allSources));
+      setCurrentStep(2);
     } catch {
       setAnalysis(null);
       setLoadedResult(null);
@@ -298,6 +316,7 @@ function App() {
     setCopyState("홈페이지 초안 복사");
     setReviewConfirmed(false);
     setImageStatus("");
+    setCurrentStep(1);
   };
 
   const removeUpload = (id: string) => {
@@ -367,6 +386,10 @@ function App() {
 
   const handleLogin = async () => {
     setHistoryMessage("");
+    if (!auth || !googleProvider) {
+      setHistoryMessage("Firebase 설정 후 Google 로그인을 사용할 수 있습니다.");
+      return;
+    }
     try {
       await signInWithPopup(auth, googleProvider);
     } catch {
@@ -376,6 +399,7 @@ function App() {
 
   const handleLogout = async () => {
     setHistoryMessage("");
+    if (!auth) return;
     await signOut(auth);
   };
 
@@ -414,35 +438,193 @@ function App() {
     setCopyState("홈페이지 초안 복사");
     setImageStatus("");
     setHistoryMessage("저장된 공지를 현재 작업 화면으로 불러왔습니다.");
+    setCurrentStep(2);
   };
 
   return (
     <main>
-      <header className="site-header">
-        <div className="top-line">
-          <span>KANGNAM UNIVERSITY</span>
-          <span>공지 작성 지원</span>
+      {!isWorkspacePage && <section className="landing-hero" aria-labelledby="landing-title">
+        <div className="landing-orbit landing-orbit-one" aria-hidden="true" />
+        <div className="landing-orbit landing-orbit-two" aria-hidden="true" />
+
+        <nav className="landing-nav" aria-label="소개 페이지 메뉴">
+          <a className="landing-brand" href="#top" aria-label="KNU Notice AI 홈">
+            <span>K</span>
+            <strong>KNU Notice AI</strong>
+          </a>
+          <div className="landing-nav-links">
+            <a href="#how-it-works">작동 방식</a>
+            <button type="button" onClick={openWorkspace}>공지 만들기</button>
+          </div>
+        </nav>
+
+        <div className="landing-content" id="top">
+          <div className="landing-copy">
+            <p className="landing-kicker">
+              <Sparkles size={15} />
+              강남대학교 공지 제작 AI
+            </p>
+            <h1 id="landing-title">
+              메일 한 통이
+              <span>모든 채널의 공지</span>가 됩니다.
+            </h1>
+            <p className="landing-description">
+              이메일과 첨부파일을 넣으면 핵심 정보를 찾아 검토하고,
+              홈페이지·SNS·메시지·홍보 이미지 초안까지 한 번에 완성합니다.
+            </p>
+            <div className="landing-actions">
+              <button className="landing-primary" type="button" onClick={openWorkspace}>
+                지금 공지 만들기
+                <ArrowRight size={19} />
+              </button>
+              <a className="landing-secondary" href="#how-it-works">
+                30초 만에 이해하기
+              </a>
+            </div>
+            <div className="landing-trust" aria-label="서비스 특징">
+              <span><CheckCircle2 size={15} /> 브라우저에서 안전하게 처리</span>
+              <span><CheckCircle2 size={15} /> 게시 전 담당자 검토</span>
+            </div>
+          </div>
+
+          <div className="product-demo" aria-label="메일이 채널별 공지로 변환되는 과정을 보여주는 화면">
+            <div className="demo-window">
+              <div className="demo-toolbar">
+                <div className="demo-dots" aria-hidden="true"><i /><i /><i /></div>
+                <span><Sparkles size={14} /> Notice AI가 공지를 만들고 있어요</span>
+                <em>LIVE</em>
+              </div>
+
+              <div className="demo-board">
+                <div className="demo-source">
+                  <div className="demo-label"><span>01</span> 자료 입력</div>
+                  <div className="source-card source-mail">
+                    <div className="source-icon"><Mail size={18} /></div>
+                    <div>
+                      <strong>2026 하계 인턴십 모집</strong>
+                      <span>대외협력팀 · 방금 전</span>
+                    </div>
+                    <CheckCircle2 className="source-check" size={17} />
+                  </div>
+                  <div className="source-card source-file">
+                    <div className="source-icon"><Paperclip size={18} /></div>
+                    <div>
+                      <strong>모집요강.pdf</strong>
+                      <span>8페이지 · 분석 완료</span>
+                    </div>
+                    <CheckCircle2 className="source-check" size={17} />
+                  </div>
+                </div>
+
+                <div className="demo-engine" aria-hidden="true">
+                  <div className="engine-line"><i /></div>
+                  <div className="engine-core"><Sparkles size={22} /></div>
+                  <div className="engine-line"><i /></div>
+                </div>
+
+                <div className="demo-result">
+                  <div className="demo-label"><span>02</span> 공지 완성</div>
+                  <div className="result-sheet">
+                    <div className="result-sheet-head">
+                      <span className="result-category">취업·진로</span>
+                      <span className="result-status"><CheckCircle2 size={13} /> 검토 준비</span>
+                    </div>
+                    <h2>2026 하계 인턴십<br />참여자 모집</h2>
+                    <p>재학생을 위한 현장 실무 경험과<br />직무 멘토링 기회를 제공합니다.</p>
+                    <dl>
+                      <div><dt>대상</dt><dd>강남대학교 재학생</dd></div>
+                      <div><dt>기간</dt><dd>7. 1. — 8. 28.</dd></div>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+
+              <div className="channel-strip">
+                <span className="channel-strip-title">채널별 초안 자동 생성</span>
+                <div className="channel-item channel-home"><Monitor size={17} /><strong>홈페이지</strong><i /></div>
+                <div className="channel-item channel-sns"><Hash size={17} /><strong>SNS</strong><i /></div>
+                <div className="channel-item channel-message"><MessageCircle size={17} /><strong>메시지</strong><i /></div>
+                <div className="channel-item channel-image"><ImageIcon size={17} /><strong>홍보 이미지</strong><i /></div>
+              </div>
+            </div>
+            <div className="demo-float demo-float-time">
+              <strong>10분 → 1분</strong>
+              <span>반복 작성 시간 단축</span>
+            </div>
+            <div className="demo-float demo-float-safe">
+              <CheckCircle2 size={18} />
+              <span>근거까지 함께 확인</span>
+            </div>
+          </div>
         </div>
+
+        <div className="landing-steps" id="how-it-works">
+          <div><span>01</span><strong>메일·파일 넣기</strong><small>EML, PDF, Word, 이미지</small></div>
+          <ArrowRight size={18} aria-hidden="true" />
+          <div><span>02</span><strong>핵심 정보 검토</strong><small>대상, 기간, 혜택, 신청 방법</small></div>
+          <ArrowRight size={18} aria-hidden="true" />
+          <div><span>03</span><strong>채널별 초안 확인</strong><small>홈페이지, SNS, 메시지</small></div>
+          <ArrowRight size={18} aria-hidden="true" />
+          <div><span>04</span><strong>홍보 이미지 제작</strong><small>검토한 내용으로 PNG 완성</small></div>
+        </div>
+      </section>}
+
+      {isWorkspacePage && <>
+      <header className="site-header" id="notice-workspace">
         <div className="brand-bar">
-          <div className="brand-mark">KNU</div>
-          <div>
-            <strong>강남대학교</strong>
-            <span>Kangnam University Notice Helper</span>
+          <a className="workspace-brand" href="#top" aria-label="KNU Notice AI 첫 화면">
+            <span>K</span>
+            <strong>KNU Notice AI</strong>
+          </a>
+          <div className="workspace-context">
+            <small>강남대학교</small>
+            <span>공지 제작 워크스페이스</span>
           </div>
           <nav aria-label="서비스 메뉴">
-            <a href="#input">자료입력</a>
-            <a href="#result">추출결과</a>
-            <a href="#history">저장공지</a>
+            <button type="button" onClick={() => window.location.assign("/")}>서비스 홈</button>
+            <button type="button" onClick={() => moveToStep(1)}>새 공지</button>
+            <button type="button" onClick={() => moveToStep(5)}>저장 공지</button>
           </nav>
           <AuthPanel authReady={authReady} user={user} onLogin={handleLogin} onLogout={handleLogout} />
         </div>
       </header>
 
       <div className="page-shell">
-        <section className="hero">
+        <ol className="stepper" aria-label="공지 작성 단계">
+          {[
+            { step: 1 as const, label: "자료 입력" },
+            { step: 2 as const, label: "정보 검토" },
+            { step: 3 as const, label: "초안 작성" },
+            { step: 4 as const, label: "이미지 제작" },
+            { step: 5 as const, label: "저장 공지" },
+          ].map((item) => (
+            <li
+              key={item.step}
+              className={
+                currentStep === item.step
+                  ? "is-current"
+                  : result && currentStep > item.step
+                    ? "is-complete"
+                    : ""
+              }
+            >
+              <button
+                type="button"
+                onClick={() => moveToStep(item.step)}
+                disabled={(item.step === 2 || item.step === 3 || item.step === 4) && !result}
+                aria-current={currentStep === item.step ? "step" : undefined}
+              >
+                <span>{currentStep > item.step ? <CheckCircle2 size={17} /> : item.step}</span>
+                {item.label}
+              </button>
+            </li>
+          ))}
+        </ol>
+
+        {currentStep === 1 && <section className="hero">
           <div>
             <p className="eyebrow">이메일·첨부파일 통합 공지 도우미</p>
-            <h1>메일과 첨부파일의 핵심 정보를 한 번에</h1>
+            <h1>메일과 첨부파일의 <span>핵심 정보를</span> 한 번에</h1>
             <p className="hero-copy">
               이메일, 이미지, PDF, Word에서 내용을 추출하고 근거와 함께 채널별 공지 초안을 만듭니다.
             </p>
@@ -453,9 +635,9 @@ function App() {
               파일은 서버에 업로드하지 않고 현재 브라우저에서 처리합니다. 저장 버튼은 직접 입력한 메일 본문과 최종 공지 초안만 Firestore에 저장합니다.
             </span>
           </div>
-        </section>
+        </section>}
 
-        <section className="input-workspace" id="input" aria-label="메일과 첨부파일 입력">
+        {currentStep === 1 && <section className="input-workspace step-stage" id="input" aria-label="메일과 첨부파일 입력">
           <div className="input-panel">
             <div className="panel-heading">
               <div>
@@ -526,7 +708,7 @@ function App() {
               </div>
             )}
           </div>
-        </section>
+        </section>}
 
         {error && (
           <div className="error-message global-error" role="alert">
@@ -535,115 +717,140 @@ function App() {
           </div>
         )}
 
-        <div className="primary-actions">
+        {currentStep === 1 && <div className="primary-actions step-actions">
           <button className="primary-button" type="button" onClick={handleGenerate} disabled={isProcessing}>
             {isProcessing ? <LoaderCircle className="spin" size={18} /> : <FileText size={18} />}
-            {isProcessing ? "파일 처리 중" : "전체 내용 정리하기"}
+            {isProcessing ? "파일 처리 중" : "내용 정리하고 다음"}
+            {!isProcessing && <ArrowRight size={18} />}
           </button>
           <button className="secondary-button" type="button" onClick={handleReset}>
             <RefreshCcw size={18} />
             모두 지우기
           </button>
-        </div>
+        </div>}
 
-        <section className="result-panel full-result" id="result">
+        {(currentStep === 2 || currentStep === 3 || currentStep === 4) && <section className="result-panel full-result step-stage" id="result">
           <div className="panel-heading">
             <div>
-              <p className="panel-kicker">검토 가능한 결과</p>
-              <h2>추출 정보와 원문 근거</h2>
+              <p className="panel-kicker">
+                {currentStep === 2
+                  ? "2단계 · 정보 검토"
+                  : currentStep === 3
+                    ? "3단계 · 초안 작성"
+                    : "4단계 · 이미지 제작"}
+              </p>
+              <h2>
+                {currentStep === 2
+                  ? "추출 정보와 원문 근거"
+                  : currentStep === 3
+                    ? "채널별 공지 초안"
+                    : "홍보 이미지 만들기"}
+              </h2>
             </div>
-            <span className="status-pill">{result ? "검토 필요" : "대기 중"}</span>
+            <span className="status-pill">
+              {currentStep === 2 ? "검토 필요" : currentStep === 3 ? "게시 준비" : "이미지 준비"}
+            </span>
           </div>
 
           {result ? (
             <>
-              <div className="info-grid" aria-label="추출된 핵심 정보">
-                {analysis
-                  ? analysis.fields.map((field) => (
-                      <EditableInfo key={field.key} field={field} onChange={updateField} />
-                    ))
-                  : (Object.entries(result) as Array<[ExtractedKey, string]>).map(([key, value]) => (
-                      <EditableInfo
-                        key={key}
-                        field={{
-                          key,
-                          label: fieldLabels[key],
-                          value,
-                          confidence: value ? 1 : 0,
-                          sourceName: "",
-                          evidence: "",
-                          candidates: [],
-                          hasConflict: false,
-                        }}
-                        onChange={updateField}
-                      />
-                    ))}
-              </div>
+              {currentStep === 2 && <>
+                <div className="review-workspace">
+                  <div className="review-summary" aria-label="추출 정보">
+                    <h3 className="review-column-title">추출 정보</h3>
+                    <div className="info-grid" aria-label="추출된 핵심 정보">
+                      {analysis
+                        ? analysis.fields.map((field) => (
+                            <EditableInfo key={field.key} field={field} onChange={updateField} />
+                          ))
+                        : (Object.entries(result) as Array<[ExtractedKey, string]>).map(([key, value]) => (
+                            <EditableInfo
+                              key={key}
+                              field={{
+                                key,
+                                label: fieldLabels[key],
+                                value,
+                                confidence: value ? 1 : 0,
+                                sourceName: "",
+                                evidence: "",
+                                candidates: [],
+                                hasConflict: false,
+                              }}
+                              onChange={updateField}
+                            />
+                          ))}
+                    </div>
 
-              <div className={missingItems.length ? "missing-box" : "complete-box"}>
-                {missingItems.length ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
-                <span>
-                  {missingItems.length
-                    ? `누락 가능 항목: ${missingItems.join(", ")}. 원문 확인 후 입력해 주세요.`
-                    : "필수 항목이 모두 감지되었습니다. 각 근거와 충돌 여부를 확인해 주세요."}
-                </span>
-              </div>
+                    <div className={missingItems.length ? "missing-box" : "complete-box"}>
+                      {missingItems.length ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
+                      <span>
+                        {missingItems.length
+                          ? `누락 가능 항목: ${missingItems.join(", ")}. 원문 확인 후 입력해 주세요.`
+                          : "필수 항목이 모두 감지되었습니다. 각 근거와 충돌 여부를 확인해 주세요."}
+                      </span>
+                    </div>
 
-              {analysis?.conflicts.length ? (
-                <div className="conflict-box">
-                  <AlertTriangle size={19} />
-                  <div>
-                    <strong>서로 다른 정보가 발견되었습니다.</strong>
-                    <span>{analysis.conflicts.map((field) => field.label).join(", ")} 항목의 후보를 비교해 주세요.</span>
+                    {analysis?.conflicts.length ? (
+                      <div className="conflict-box">
+                        <AlertTriangle size={19} />
+                        <div>
+                          <strong>서로 다른 정보가 발견되었습니다.</strong>
+                          <span>{analysis.conflicts.map((field) => field.label).join(", ")} 항목의 후보를 비교해 주세요.</span>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="review-evidence" aria-label="출처와 원문 근거">
+                    <div className="evidence-box">
+                      <h3>필드별 출처와 근거</h3>
+                      {analysis ? (
+                        <div className="evidence-list">
+                          {analysis.fields.map((field) => (
+                            <EvidenceItem key={field.key} field={field} />
+                          ))}
+                        </div>
+                      ) : (
+                        <ul>
+                          {evidenceItems.map((item) => (
+                            <li key={`${item.label}-${item.source}`}>
+                              <strong>{item.label}</strong>
+                              <span>{item.source}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+
+                    {analysis && (analysis.links.length > 0 || analysis.qrCodes.length > 0) && (
+                      <div className="link-box">
+                        <h3>링크와 QR 코드</h3>
+                        <ul>
+                          {analysis.links.map((link) => (
+                            <li key={link}>
+                              <ExternalLink size={16} />
+                              <a href={link} target="_blank" rel="noreferrer">{link}</a>
+                            </li>
+                          ))}
+                          {analysis.qrCodes
+                            .filter((code) => !analysis.links.includes(code))
+                            .map((code) => (
+                              <li key={code}>
+                                <QrCode size={16} />
+                                <span>{code}</span>
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 </div>
-              ) : null}
+              </>}
 
-              <div className="evidence-box">
-                <h3>필드별 출처와 근거</h3>
-                {analysis ? (
-                  <div className="evidence-list">
-                    {analysis.fields.map((field) => (
-                      <EvidenceItem key={field.key} field={field} />
-                    ))}
-                  </div>
-                ) : (
-                  <ul>
-                    {evidenceItems.map((item) => (
-                      <li key={`${item.label}-${item.source}`}>
-                        <strong>{item.label}</strong>
-                        <span>{item.source}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              {analysis && (analysis.links.length > 0 || analysis.qrCodes.length > 0) && (
-                <div className="link-box">
-                  <h3>링크와 QR 코드</h3>
-                  <ul>
-                    {analysis.links.map((link) => (
-                      <li key={link}>
-                        <ExternalLink size={16} />
-                        <a href={link} target="_blank" rel="noreferrer">{link}</a>
-                      </li>
-                    ))}
-                    {analysis.qrCodes
-                      .filter((code) => !analysis.links.includes(code))
-                      .map((code) => (
-                        <li key={code}>
-                          <QrCode size={16} />
-                          <span>{code}</span>
-                        </li>
-                      ))}
-                  </ul>
-                </div>
-              )}
-
-              {post && channelDrafts && (
+              {(currentStep === 3 || currentStep === 4) && post && channelDrafts && (
                 <div className="draft-box">
-                  <div className="draft-heading">
+                  {currentStep === 3 && <>
+                    <div className="draft-heading">
                     <div>
                       <p className="panel-kicker">채널별 초안</p>
                       <h3>{channelLabels[activeChannel]} 게시용 글</h3>
@@ -705,12 +912,13 @@ function App() {
                       <p className="draft-note">발송 전 홈페이지 링크를 추가해 주세요.</p>
                     </div>
                   )}
-                  {imageDraft && (
+                  </>}
+                  {currentStep === 4 && imageDraft && (
                     <div className="image-maker">
                       <div className="image-maker-heading">
                         <div>
                           <p className="panel-kicker">이미지 제작</p>
-                          <h3>초안을 홍보·안내 이미지로 만들기</h3>
+                          <h3>초안을 홍보 이미지로 만들기</h3>
                         </div>
                         <button
                           className="image-download-button"
@@ -722,37 +930,11 @@ function App() {
                           PNG 이미지 저장
                         </button>
                       </div>
-                      <div className="image-template-tabs" aria-label="이미지 유형 선택">
-                        <button
-                          type="button"
-                          aria-pressed={imageTemplate === "promotional"}
-                          className={imageTemplate === "promotional" ? "is-active" : ""}
-                          onClick={() => {
-                            setImageTemplate("promotional");
-                            setImageStatus("");
-                          }}
-                        >
-                          <ImageIcon size={18} />
-                          <span><strong>홍보용</strong><small>모집·혜택 중심</small></span>
-                        </button>
-                        <button
-                          type="button"
-                          aria-pressed={imageTemplate === "informational"}
-                          className={imageTemplate === "informational" ? "is-active" : ""}
-                          onClick={() => {
-                            setImageTemplate("informational");
-                            setImageStatus("");
-                          }}
-                        >
-                          <FileText size={18} />
-                          <span><strong>안내용</strong><small>정보 확인 중심</small></span>
-                        </button>
-                      </div>
                       <div className="image-workspace">
                         <ImageDraftPreview draft={imageDraft} />
                         <div className="image-guide">
                           <strong>1080 x 1350 PNG</strong>
-                          <span>SNS 피드와 모바일 안내에 적합한 4:5 비율입니다.</span>
+                          <span>모집·혜택과 필수 안내 정보를 한 장에 담은 홍보용 4:5 이미지입니다.</span>
                           <span>{reviewConfirmed ? "검토가 완료되어 저장할 수 있습니다." : "위 검토 확인란을 선택하면 저장할 수 있습니다."}</span>
                           {imageStatus && <em role="status">{imageStatus}</em>}
                         </div>
@@ -768,9 +950,45 @@ function App() {
               <p>메일 본문이나 첨부파일을 추가한 뒤 전체 내용 정리하기를 눌러 주세요.</p>
             </div>
           )}
-        </section>
+          {result && currentStep === 2 && (
+            <div className="step-actions">
+              <button className="secondary-button" type="button" onClick={() => moveToStep(1)}>
+                <ArrowLeft size={18} />
+                이전
+              </button>
+              <button className="primary-button" type="button" onClick={() => moveToStep(3)}>
+                초안 확인하기
+                <ArrowRight size={18} />
+              </button>
+            </div>
+          )}
+          {result && currentStep === 3 && (
+            <div className="step-actions">
+              <button className="secondary-button" type="button" onClick={() => moveToStep(2)}>
+                <ArrowLeft size={18} />
+                검토로 돌아가기
+              </button>
+              <button className="primary-button" type="button" onClick={() => moveToStep(4)}>
+                이미지 제작하기
+                <ArrowRight size={18} />
+              </button>
+            </div>
+          )}
+          {result && currentStep === 4 && (
+            <div className="step-actions">
+              <button className="secondary-button" type="button" onClick={() => moveToStep(3)}>
+                <ArrowLeft size={18} />
+                초안으로 돌아가기
+              </button>
+              <button className="primary-button" type="button" onClick={() => moveToStep(5)}>
+                저장 공지 보기
+                <ArrowRight size={18} />
+              </button>
+            </div>
+          )}
+        </section>}
 
-        <section className="history-section" id="history" aria-label="저장된 공지">
+        {currentStep === 5 && <section className="history-section step-stage" id="history" aria-label="저장된 공지">
           <div className="panel-heading">
             <div>
               <p className="panel-kicker">로그인 기반 기억</p>
@@ -809,8 +1027,19 @@ function App() {
               <p>아직 저장된 공지가 없습니다. 공지 초안을 만든 뒤 저장 버튼을 눌러 주세요.</p>
             </div>
           )}
-        </section>
+          <div className="step-actions">
+            <button className="secondary-button" type="button" onClick={() => moveToStep(result ? 4 : 1)}>
+              <ArrowLeft size={18} />
+              {result ? "이미지 제작으로 돌아가기" : "자료 입력으로"}
+            </button>
+            <button className="primary-button" type="button" onClick={handleReset}>
+              새 공지 시작
+              <ArrowRight size={18} />
+            </button>
+          </div>
+        </section>}
       </div>
+      </>}
     </main>
   );
 }
@@ -905,11 +1134,15 @@ function EvidenceItem({ field }: { field: DetailedField }) {
   const alternatives = [...new Map(field.candidates.map((candidate) => [candidate.value, candidate])).values()]
     .filter((candidate) => candidate.value !== field.value);
   return (
-    <details className={field.hasConflict ? "evidence-item has-conflict" : "evidence-item"} open={field.hasConflict}>
-      <summary>
+    <article className={field.hasConflict ? "evidence-item has-conflict" : "evidence-item"}>
+      <div className="evidence-head">
         <strong>{field.label}</strong>
-        <span>{field.sourceName ? `${field.sourceName}${field.page ? ` · ${field.page}페이지` : ""}` : "근거 없음"}</span>
-      </summary>
+        {!field.sourceName ? (
+          <span>근거 없음</span>
+        ) : field.sourceName !== "직접 입력한 메일 본문" ? (
+          <span>{field.sourceName}{field.page ? ` · ${field.page}페이지` : ""}</span>
+        ) : null}
+      </div>
       <div className="evidence-detail">
         <blockquote>{field.evidence || "원문에서 해당 정보를 찾지 못했습니다."}</blockquote>
         {alternatives.length > 0 && (
@@ -923,7 +1156,7 @@ function EvidenceItem({ field }: { field: DetailedField }) {
           </div>
         )}
       </div>
-    </details>
+    </article>
   );
 }
 
@@ -948,7 +1181,7 @@ function ChannelTab({
 
 function ImageDraftPreview({ draft }: { draft: ImageDraft }) {
   return (
-    <div className={`visual-card is-${draft.template}`} aria-label={`${draft.template === "promotional" ? "홍보용" : "안내용"} 이미지 미리보기`}>
+    <div className="visual-card is-promotional" aria-label="홍보용 이미지 미리보기">
       <div className="visual-card-brand">
         <strong>KNU</strong>
         <span>KANGNAM UNIVERSITY</span>
@@ -957,9 +1190,6 @@ function ImageDraftPreview({ draft }: { draft: ImageDraft }) {
       <p className="visual-card-kicker">{draft.category}</p>
       <h4>{draft.title}</h4>
       <p className="visual-card-audience">대상 · {draft.audience}</p>
-      {draft.template === "informational" && (
-        <div className="visual-card-section-title"><span>한눈에 보는</span> 핵심 안내</div>
-      )}
       <div className="visual-card-highlight">
         <span>주요 혜택</span>
         <strong>{draft.benefit}</strong>

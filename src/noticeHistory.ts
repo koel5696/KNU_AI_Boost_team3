@@ -25,7 +25,12 @@ export type SavedNotice = {
 
 type SavedNoticeDoc = Omit<SavedNotice, "id">;
 
-const noticesCollection = collection(db, "notices");
+function getNoticesCollection() {
+  if (!db) {
+    throw new Error("Firebase가 설정되지 않았습니다.");
+  }
+  return collection(db, "notices");
+}
 
 export async function saveNoticeDraft(params: {
   userId: string;
@@ -34,7 +39,7 @@ export async function saveNoticeDraft(params: {
   extractedInfo: ExtractedInfo;
 }) {
   const createdAtMs = Date.now();
-  const doc = await addDoc(noticesCollection, {
+  const doc = await addDoc(getNoticesCollection(), {
     userId: params.userId,
     title: params.post.title,
     category: params.post.category,
@@ -62,7 +67,7 @@ export async function saveNoticeDraft(params: {
 export async function loadNoticeDrafts(userId: string) {
   const snapshot = await getDocs(
     query(
-      noticesCollection,
+      getNoticesCollection(),
       where("userId", "==", userId),
       orderBy("createdAtMs", "desc"),
       limit(20),
