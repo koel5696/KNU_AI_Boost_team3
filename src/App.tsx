@@ -66,6 +66,7 @@ import { loadNoticeDrafts, saveNoticeDraft, type SavedNotice } from "./noticeHis
 
 type Channel = "homepage" | "sns" | "message";
 type UploadStatus = "queued" | "processing" | "done" | "error";
+type ChannelDraftTexts = Record<Channel, string>;
 
 type UploadItem = {
   id: string;
@@ -91,7 +92,7 @@ function App() {
   const [loadedResult, setLoadedResult] = useState<ExtractedInfo | null>(null);
   const [error, setError] = useState("");
   const [copyState, setCopyState] = useState("홈페이지 초안 복사");
-  const [reviewConfirmed, setReviewConfirmed] = useState(false);
+  const [draftTexts, setDraftTexts] = useState<ChannelDraftTexts | null>(null);
   const [activeChannel, setActiveChannel] = useState<Channel>("homepage");
   const [imageTemplate, setImageTemplate] = useState<ImageTemplate>("promotional");
   const [imageStatus, setImageStatus] = useState("");
@@ -154,6 +155,19 @@ function App() {
     };
   }, [post, result]);
 
+  useEffect(() => {
+    if (!channelDrafts) {
+      setDraftTexts(null);
+      return;
+    }
+
+    setDraftTexts({
+      homepage: channelDrafts.homepage,
+      sns: channelDrafts.sns,
+      message: channelDrafts.message,
+    });
+  }, [channelDrafts]);
+
   const missingItems = useMemo(() => {
     if (!result) return [];
     return (Object.entries(result) as Array<[ExtractedKey, string]>)
@@ -183,7 +197,6 @@ function App() {
     setError("");
     setAnalysis(null);
     setLoadedResult(null);
-    setReviewConfirmed(false);
     const remaining = Math.max(0, MAX_FILES - uploads.length);
     const files = Array.from(fileList).slice(0, remaining);
     if (!files.length) {
@@ -280,7 +293,6 @@ function App() {
   const handleGenerate = () => {
     setActiveChannel("homepage");
     setCopyState("홈페이지 초안 복사");
-    setReviewConfirmed(false);
     setImageStatus("");
     setError("");
     setHistoryMessage("");
@@ -317,7 +329,6 @@ function App() {
     setSaveMessage(user ? "입력을 초기화했습니다. 새 공지를 만든 뒤 저장할 수 있습니다." : "입력을 초기화했습니다. 저장 기능은 Google 로그인 후 사용할 수 있습니다.");
     setActiveChannel("homepage");
     setCopyState("홈페이지 초안 복사");
-    setReviewConfirmed(false);
     setImageStatus("");
   };
 
@@ -325,21 +336,21 @@ function App() {
     setUploads((current) => current.filter((upload) => upload.id !== id));
     setAnalysis(null);
     setLoadedResult(null);
-    setReviewConfirmed(false);
   };
 
   const handleCopy = async () => {
-    if (!channelDrafts) return;
-    if (!reviewConfirmed) {
-      setCopyState("확인 후 복사");
-      return;
-    }
+    if (!draftTexts) return;
     try {
-      await navigator.clipboard.writeText(channelDrafts[activeChannel]);
+      await navigator.clipboard.writeText(draftTexts[activeChannel]);
       setCopyState(`${channelLabels[activeChannel]} 초안 복사됨`);
     } catch {
       setCopyState("복사 실패");
     }
+  };
+
+  const handleDraftChange = (value: string) => {
+    setDraftTexts((drafts) => (drafts ? { ...drafts, [activeChannel]: value } : drafts));
+    setCopyState(`${channelLabels[activeChannel]} 초안 복사`);
   };
 
   const handleChannelSelect = (channel: Channel) => {
@@ -349,7 +360,7 @@ function App() {
   };
 
   const handleImageDownload = async () => {
-    if (!imageDraft || !reviewConfirmed) return;
+    if (!imageDraft) return;
     setImageStatus("이미지 만드는 중...");
     try {
       const fileName = await downloadImageDraft(imageDraft);
@@ -383,7 +394,6 @@ function App() {
       };
     });
     setLoadedResult((current) => (current ? { ...current, [key]: value } : current));
-    setReviewConfirmed(false);
   };
 
   const handleLogin = async () => {
@@ -440,7 +450,6 @@ function App() {
     setUploads([]);
     setAnalysis(null);
     setLoadedResult(notice.extractedInfo);
-    setReviewConfirmed(false);
     setActiveChannel("homepage");
     setCopyState("홈페이지 초안 복사");
     setImageStatus("");
@@ -456,7 +465,7 @@ function App() {
           <span>공지 작성 지원</span>
         </div>
         <div className="brand-bar">
-          <div className="brand-mark">KNU</div>
+          <div className="brand-mark" aria-hidden="true">📣</div>
           <div>
             <strong>강남대학교</strong>
             <span>Kangnam University Notice Helper</span>
@@ -731,7 +740,7 @@ function App() {
                 </div>
               )}
 
-              {post && channelDrafts && (
+              {post && channelDrafts && draftTexts && (
                 <div className="draft-box">
                   <div className="draft-heading">
                     <div>
@@ -747,11 +756,10 @@ function App() {
                         className="icon-button"
                         type="button"
                         onClick={handleCopy}
-                        disabled={!reviewConfirmed}
                         aria-label={`${channelLabels[activeChannel]} 초안 복사`}
                       >
                         <Clipboard size={18} />
-                        {copyState}
+                      {copyState}
                       </button>
                     </div>
                   </div>
@@ -769,41 +777,24 @@ function App() {
                           : "비로그인 상태에서는 공지가 저장되지 않습니다. Google 로그인 후 계정별로 저장할 수 있습니다.")}
                     </span>
                   </div>
-                  <label className="review-check">
-                    <input
-                      type="checkbox"
-                      checked={reviewConfirmed}
-                      onChange={(event) => {
-                        setReviewConfirmed(event.target.checked);
-                        setCopyState(`${channelLabels[activeChannel]} 초안 복사`);
-                      }}
+                  <div
+                    className="draft-editor-panel"
+                    role="tabpanel"
+                    aria-label={`${channelLabels[activeChannel]} 초안 편집`}
+                  >
+                    <label htmlFor={`draft-editor-${activeChannel}`}>
+                      <strong>초안 내용</strong>
+                      <span>{draftTexts[activeChannel].length}자 · 바로 수정 가능</span>
+                    </label>
+                    <textarea
+                      id={`draft-editor-${activeChannel}`}
+                      className="draft-editor"
+                      value={draftTexts[activeChannel]}
+                      onChange={(event) => handleDraftChange(event.target.value)}
+                      spellCheck
                     />
-                    <span>
-                      <strong>출처와 원문을 대조했습니다.</strong>
-                      제목, 대상, 기간, 신청 방법, 문의처에 문제가 없음을 확인해야 복사할 수 있습니다.
-                    </span>
-                  </label>
-                  {activeChannel === "homepage" && (
-                    <div className="post-preview" role="tabpanel" aria-label="홈페이지 게시용 글 미리보기">
-                      <div className="post-field"><span>제목</span><strong>{post.title}</strong></div>
-                      <div className="post-field"><span>분류</span><strong>{post.category}</strong></div>
-                      <pre>{post.body}</pre>
-                    </div>
-                  )}
-                  {activeChannel === "sns" && (
-                    <div className="sns-preview" role="tabpanel" aria-label="SNS 게시용 글 미리보기">
-                      <div className="sns-profile"><span className="sns-avatar">KNU</span><span><strong>강남대학교</strong><small>@kangnam_univ</small></span></div>
-                      <pre>{channelDrafts.snsPost.body}</pre>
-                      <p className="hashtags">{channelDrafts.snsPost.hashtags}</p>
-                    </div>
-                  )}
-                  {activeChannel === "message" && (
-                    <div className="message-preview" role="tabpanel" aria-label="메시지 발송용 글 미리보기">
-                      <div className="message-meta"><strong>문자·메신저 발송용</strong><span>{channelDrafts.messageDraft.body.length}자</span></div>
-                      <div className="message-bubble">{channelDrafts.messageDraft.body}</div>
-                      <p className="draft-note">발송 전 홈페이지 링크를 추가해 주세요.</p>
-                    </div>
-                  )}
+                    <p>수정한 내용이 복사할 초안에 바로 반영됩니다. 게시 전 원문 근거는 위 항목에서 확인해 주세요.</p>
+                  </div>
                   {imageDraft && (
                     <div className="image-maker">
                       <div className="image-maker-heading">
@@ -815,7 +806,6 @@ function App() {
                           className="image-download-button"
                           type="button"
                           onClick={handleImageDownload}
-                          disabled={!reviewConfirmed}
                         >
                           <Download size={18} />
                           PNG 이미지 저장
@@ -852,7 +842,7 @@ function App() {
                         <div className="image-guide">
                           <strong>1080 x 1350 PNG</strong>
                           <span>SNS 피드와 모바일 안내에 적합한 4:5 비율입니다.</span>
-                          <span>{reviewConfirmed ? "검토가 완료되어 저장할 수 있습니다." : "위 검토 확인란을 선택하면 저장할 수 있습니다."}</span>
+                          <span>이미지 저장 전 추출 정보와 편집한 문구를 한 번 더 확인해 주세요.</span>
                           {imageStatus && <em role="status">{imageStatus}</em>}
                         </div>
                       </div>
