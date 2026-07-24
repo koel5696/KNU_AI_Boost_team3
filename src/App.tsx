@@ -103,12 +103,10 @@ function App() {
   const [historyMessage, setHistoryMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isWorkspacePage = window.location.pathname.startsWith("/workspace");
 
   const openWorkspace = () => {
-    document.getElementById("notice-workspace")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
+    window.location.assign("/workspace");
   };
 
   useEffect(() => {
@@ -450,7 +448,7 @@ function App() {
 
   return (
     <main>
-      <section className="landing-hero" aria-labelledby="landing-title">
+      {!isWorkspacePage && <section className="landing-hero" aria-labelledby="landing-title">
         <div className="landing-orbit landing-orbit-one" aria-hidden="true" />
         <div className="landing-orbit landing-orbit-two" aria-hidden="true" />
 
@@ -572,8 +570,9 @@ function App() {
           <ArrowRight size={18} aria-hidden="true" />
           <div><span>03</span><strong>채널별 공지 완성</strong><small>글과 이미지 초안을 한 번에</small></div>
         </div>
-      </section>
+      </section>}
 
+      {isWorkspacePage && <>
       <header className="site-header" id="notice-workspace">
         <div className="top-line">
           <span>KANGNAM UNIVERSITY</span>
@@ -586,6 +585,7 @@ function App() {
             <span>Kangnam University Notice Helper</span>
           </div>
           <nav aria-label="서비스 메뉴">
+            <a href="/">서비스 홈</a>
             <a href="#input">자료입력</a>
             <a href="#result">추출결과</a>
             <a href="#history">저장공지</a>
@@ -964,6 +964,7 @@ function App() {
           )}
         </section>
       </div>
+      </>}
     </main>
   );
 }
