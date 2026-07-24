@@ -29,6 +29,7 @@ const NEEDS_REVIEW = "담당자 확인 필요";
 const ENDING_PATTERN = /(합니다|됩니다|주세요|있습니다|바랍니다|부탁드립니다|모집합니다|신청할 수 있습니다|제공됩니다|입니다|이어야 합니다)$/;
 const FULL_PHONE_PATTERN = /(?:0[0-9]{1,2})-[0-9]{3,4}-[0-9]{4}/;
 const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+const AUDIENCE_NOUN_PATTERN = /(강남대학교\s*)?(재학생|휴학생|대학생|대학원생|학부생|신입생|졸업생|청년|교직원|지역\s*주민)/g;
 
 export const sampleMail = `제목: 청년 대상 AI 직무교육 참가자 모집
 
@@ -101,6 +102,12 @@ function normalizeAudience(value: string) {
     .replace(/[.。]\s*$/, "")
     .trim();
 
+  if (/안녕하세요|반갑습니다|초대합니다|여러분/.test(normalized) && !/대상|자격/.test(normalized)) {
+    const audienceNouns = [...normalized.matchAll(AUDIENCE_NOUN_PATTERN)]
+      .map((match) => `${match[1] ?? ""}${match[2]}`.replace(/\s+/g, " ").trim());
+    return audienceNouns.at(-1) ?? "";
+  }
+
   normalized = normalized
     .replace(/을\s*대상으로.*$/, "")
     .replace(/를\s*대상으로.*$/, "")
@@ -115,6 +122,8 @@ function normalizeAudience(value: string) {
     .replace(/참가자를\s*모집합니다.*$/, "")
     .replace(/참가팀을\s*모집합니다.*$/, "")
     .replace(/모집합니다.*$/, "")
+    .replace(/\s*여러분\s*안녕하세요.*$/, "")
+    .replace(/\s*여러분$/, "")
     .trim();
 
   if (!normalized || ENDING_PATTERN.test(normalized)) return "";

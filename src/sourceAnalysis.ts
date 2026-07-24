@@ -55,6 +55,9 @@ const keys = Object.keys(fieldLabels) as ExtractedKey[];
 const NEEDS_REVIEW = "담당자 확인 필요";
 const GENERIC_EVIDENCE = "규칙 기반으로 문서에서 감지됨";
 const URL_PATTERN = /https?:\/\/[^\s<>"')\]]+/gi;
+const PHONE_PATTERN = /0\d{1,2}-\d{3,4}-\d{4}/;
+const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+const AUDIENCE_NOUN_PATTERN = /(강남대학교\s*)?(재학생|휴학생|대학생|대학원생|학부생|신입생|졸업생|청년|교직원|지역\s*주민)/g;
 const DATE_TOKEN_PATTERN =
   /(?:20\d{2}[./-]\s*\d{1,2}[./-]\s*\d{1,2}(?:\s*\d{1,2}:\d{2})?|20\d{2}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일?(?:\s*\d{1,2}:\d{2})?|\d{1,2}\s*월\s*\d{1,2}\s*일?(?:\s*\d{1,2}:\d{2})?)/g;
 
@@ -90,6 +93,46 @@ function meaningfulWords(value: string) {
     .split(/\s+/)
     .map((word) => word.replace(/[^0-9A-Za-z가-힣@./:-]/g, ""))
     .filter((word) => word.length >= 2);
+}
+
+function cleanAudienceValue(value: string) {
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (/안녕하세요|반갑습니다|초대합니다|여러분/.test(compact) && !/대상|자격/.test(compact)) {
+    const audienceNouns = [...compact.matchAll(AUDIENCE_NOUN_PATTERN)]
+      .map((match) => `${match[1] ?? ""}${match[2]}`.replace(/\s+/g, " ").trim());
+    return audienceNouns.at(-1) ?? "";
+  }
+
+  return compact
+    .replace(/\s*여러분\s*안녕하세요.*$/, "")
+    .replace(/\s*여러분$/, "")
+    .replace(/을\s*대상으로.*$/, "")
+    .replace(/를\s*대상으로.*$/, "")
+    .replace(/대상으로.*$/, "")
+    .replace(/참가자를\s*모집합니다.*$/, "")
+    .replace(/모집합니다.*$/, "")
+    .trim();
+}
+
+function cleanContactValue(value: string) {
+  const phone = value.match(PHONE_PATTERN)?.[0];
+  if (phone) return phone;
+  const email = value.match(EMAIL_PATTERN)?.[0];
+  return email ?? value.replace(/^[^0-9A-Za-z가-힣@]+/, "").trim();
+}
+
+function cleanEvidenceForDisplay(key: ExtractedKey, value: string, evidence: string) {
+  if (key === "contact") {
+    const phone = value.match(PHONE_PATTERN)?.[0] ?? evidence.match(PHONE_PATTERN)?.[0];
+    if (phone) return `문의: ${phone}`;
+    const email = value.match(EMAIL_PATTERN)?.[0] ?? evidence.match(EMAIL_PATTERN)?.[0];
+    if (email) return `문의: ${email}`;
+  }
+  if (key === "audience") {
+    const audience = cleanAudienceValue(value || evidence);
+    if (audience && /안녕하세요|반갑습니다|초대합니다/.test(evidence)) return `대상: ${audience}`;
+  }
+  return evidence;
 }
 
 function findEvidence(lines: string[], value: string) {
@@ -128,7 +171,7 @@ function candidate(
     sourceId: context.source.id,
     sourceName: context.source.fileName,
     page: context.source.page,
-    evidence,
+    evidence: cleanEvidenceForDisplay(key, value.trim(), evidence),
     confidence: scoreWithContext(key, confidence, context.source, evidence),
     isOcr: context.source.isOcr,
   };
@@ -158,6 +201,8 @@ function collectLabeledCandidates(context: SourceContext, key: ExtractedKey) {
 
 function cleanFieldValue(key: ExtractedKey, value: string) {
   let cleaned = value.replace(/\s+/g, " ").trim();
+  if (key === "audience") cleaned = cleanAudienceValue(cleaned);
+  if (key === "contact") cleaned = cleanContactValue(cleaned);
   if (key === "period") cleaned = normalizeDatePhrase(cleaned);
   if (key === "applyMethod") {
     cleaned = cleaned
@@ -210,8 +255,88 @@ function extractDatePhrase(line: string) {
   return normalizeDatePhrase(`${matches[0]}${suffix}`);
 }
 
+const DATE_RANGE_PATTERN = /20\d{2}[.]\s*\d{1,2}[.]\s*\d{1,2}\s*~\s*20\d{2}[.]\s*\d{1,2}[.]\s*\d{1,2}/g;
+const TABLE_HEADER_WORDS = /주제|집단상담명|프로그램명|기간|시간|총시간|인원|내용|방식|대상|신청|문의|QR/i;
+
+function cleanScheduleWhitespace(value: string) {
+  return value.replace(/\s+/g, " ").replace(/\s*~\s*/g, " ~ ").trim();
+}
+
+function stripScheduleNoise(value: string) {
+  return value
+    .replace(TABLE_HEADER_WORDS, " ")
+    .replace(/20\d{2}-?\d?\s*학기|여름방학|겨울방학|참가자\s*모집|모집\s*안내/g, " ")
+    .replace(/[•✔·]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function inferProgramLabel(lines: string[], dateLineIndex: number) {
+  const candidates: string[] = [];
+  for (let index = dateLineIndex - 1; index >= 0 && candidates.length < 2; index -= 1) {
+    const line = stripScheduleNoise(lines[index] ?? "");
+    if (!line || DATE_RANGE_PATTERN.test(line) || TABLE_HEADER_WORDS.test(line)) continue;
+    if (/https?:\/\//i.test(line) || PHONE_PATTERN.test(line)) continue;
+    if (line.length > 80) continue;
+    candidates.unshift(line);
+  }
+
+  const combined = candidates.join(" ").trim();
+  if (!combined) return "프로그램";
+
+  const words = combined.split(/\s+/);
+  if (words.length > 12) return words.slice(-12).join(" ");
+  return combined;
+}
+
+function extractProgramScheduleFromLines(lines: string[], dateLineIndex: number) {
+  const dateLine = lines[dateLineIndex];
+  const range = dateLine.match(DATE_RANGE_PATTERN)?.[0];
+  if (!range) return null;
+
+  const block = [
+    lines[dateLineIndex - 2] ?? "",
+    lines[dateLineIndex - 1] ?? "",
+    lines[dateLineIndex],
+    lines[dateLineIndex + 1] ?? "",
+    lines[dateLineIndex + 2] ?? "",
+  ].join(" ");
+  const label = inferProgramLabel(lines, dateLineIndex);
+  const normalizedRange = normalizeDatePhrase(range);
+  const weekday = block.match(/매주\s*(월|화|수|목|금|토|일)요일/)?.[0] ?? "";
+  const sessions = block.match(/총\s*\d+\s*회기/)?.[0] ?? "";
+  const time = block.match(/\d{1,2}:\d{2}\s*~\s*\d{1,2}:\d{2}/)?.[0] ?? "";
+  const capacity = block.match(/\d+\s*명\s*이내/)?.[0] ?? "";
+  const method = block.match(/대면|비대면|온라인/)?.[0] ?? "";
+  const details = [normalizedRange, weekday, sessions, time, capacity, method]
+    .map(cleanScheduleWhitespace)
+    .filter(Boolean)
+    .join(", ");
+
+  return `${label}: ${details}`;
+}
+
+function extractProgramSchedules(text: string) {
+  const lines = linesOf(text);
+  const schedules = lines
+    .map((line, index) => (DATE_RANGE_PATTERN.test(line) ? extractProgramScheduleFromLines(lines, index) : null))
+    .filter((value): value is string => Boolean(value));
+
+  return schedules.length >= 2 ? schedules.join("\n") : "";
+}
+
+function collectProgramScheduleCandidates(context: SourceContext) {
+  const value = extractProgramSchedules(context.source.text);
+  if (!value) return [];
+  return [{
+    ...candidate(context, "period", value, 0.94, "첨부 이미지 표의 프로그램별 기간 및 시간"),
+    periodKind: "event" as const,
+  }];
+}
+
 function collectPeriodCandidates(context: SourceContext) {
   const results: PeriodCandidate[] = [];
+  results.push(...collectProgramScheduleCandidates(context));
   for (const line of context.lines) {
     const phrase = extractDatePhrase(line);
     if (!phrase) continue;
@@ -252,6 +377,16 @@ function combinePeriodValue(candidates: PeriodCandidate[]) {
   const ranked = [...candidates].sort((a, b) => b.confidence - a.confidence);
   const application = ranked.find((item) => item.periodKind === "application");
   const event = ranked.find((item) => item.periodKind === "event");
+
+  if (event?.value.includes("\n") && /: 20\d{2}-/.test(event.value)) {
+    return {
+      value: event.value,
+      selected: event,
+      selectedGroup: [event],
+      hasConflict: Boolean(application && normalizeCandidate(application.value) !== normalizeCandidate(event.value)),
+      confidence: event.confidence,
+    };
+  }
 
   if (application && event && normalizeCandidate(application.value) !== normalizeCandidate(event.value)) {
     return {
