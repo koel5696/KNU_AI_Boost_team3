@@ -491,7 +491,7 @@ function App() {
 
         <nav className="landing-nav" aria-label="소개 페이지 메뉴">
           <a className="landing-brand" href="#top" aria-label="KNU Notice AI 홈">
-            <span>K</span>
+            <span aria-hidden="true">📣</span>
             <strong>KNU Notice AI</strong>
           </a>
           <div className="landing-nav-links">
