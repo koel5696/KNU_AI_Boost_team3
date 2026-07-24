@@ -1,0 +1,23 @@
+name: Check linked issue
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  require_closing_keyword:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require PR body to close an issue
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if echo "$PR_BODY" | grep -Eiq '(close[sd]?|fix(e[sd])?|resolve[sd]?) #[0-9]+'; then
+            echo "PR body contains an issue closing keyword."
+          else
+            echo "::error::PR body must include a closing keyword such as 'Closes #20' so the linked issue closes automatically after merge."
+            exit 1
+          fi

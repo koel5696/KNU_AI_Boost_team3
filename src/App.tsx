@@ -600,14 +600,57 @@ function App() {
           </div>
         </div>
 
-        <div className="landing-steps" id="how-it-works">
-          <div><span>01</span><strong>메일·파일 넣기</strong><small>EML, PDF, Word, 이미지</small></div>
-          <ArrowRight size={18} aria-hidden="true" />
-          <div><span>02</span><strong>핵심 정보 검토</strong><small>대상, 기간, 혜택, 신청 방법</small></div>
-          <ArrowRight size={18} aria-hidden="true" />
-          <div><span>03</span><strong>채널별 초안 확인</strong><small>홈페이지, SNS, 메시지</small></div>
-          <ArrowRight size={18} aria-hidden="true" />
-          <div><span>04</span><strong>홍보 이미지 제작</strong><small>검토한 내용으로 PNG 완성</small></div>
+      </section>}
+
+      {!isWorkspacePage && <section className="landing-flow-section" id="how-it-works" aria-labelledby="flow-title">
+        <div className="flow-heading">
+          <p className="landing-kicker">
+            <Sparkles size={15} />
+            작동 방식
+          </p>
+          <h2 id="flow-title">메일에서 공지까지 이어지는 흐름</h2>
+          <p>
+            입력한 메일과 첨부파일이 어떤 단계를 거쳐 검토 가능한 공지와 홍보 이미지로 바뀌는지 한눈에 확인할 수 있습니다.
+          </p>
+        </div>
+
+        <div className="flow-timeline" aria-label="공지 제작 흐름">
+          <article>
+            <span className="flow-number">01</span>
+            <div className="flow-icon"><Mail size={22} /></div>
+            <h3>자료 입력</h3>
+            <p>메일 본문, EML, PDF, Word, Excel, 이미지를 한 작업 공간에 모읍니다.</p>
+          </article>
+          <ArrowRight size={22} aria-hidden="true" />
+          <article>
+            <span className="flow-number">02</span>
+            <div className="flow-icon"><Sparkles size={22} /></div>
+            <h3>정보 추출</h3>
+            <p>대상, 기간, 혜택, 신청 방법과 링크를 후보·근거와 함께 정리합니다.</p>
+          </article>
+          <ArrowRight size={22} aria-hidden="true" />
+          <article>
+            <span className="flow-number">03</span>
+            <div className="flow-icon"><Clipboard size={22} /></div>
+            <h3>채널별 초안</h3>
+            <p>홈페이지, SNS, 메시지 문구를 바로 편집하고 현재 문구를 복사합니다.</p>
+          </article>
+          <ArrowRight size={22} aria-hidden="true" />
+          <article>
+            <span className="flow-number">04</span>
+            <div className="flow-icon"><ImageIcon size={22} /></div>
+            <h3>이미지 제작</h3>
+            <p>검토한 정보로 1080 x 1350 공지 이미지를 만들어 저장합니다.</p>
+          </article>
+        </div>
+
+        <div className="flow-summary">
+          <div><strong>저장 위치</strong><span>Google 로그인 후 Firestore의 계정별 저장 공지에 보관됩니다.</span></div>
+          <div><strong>보안 흐름</strong><span>파일 분석은 브라우저에서 처리하고 저장 시 공지 초안 정보만 전송합니다.</span></div>
+          <button className="landing-primary" type="button" onClick={openWorkspace}>
+            작업 공간 열기
+            <ArrowRight size={19} />
+          </button>
         </div>
       </section>}
 
