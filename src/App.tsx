@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   Clipboard,
   Download,
@@ -104,8 +105,18 @@ function App() {
   const [saveMessage, setSaveMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isWorkspacePage = window.location.pathname.startsWith("/workspace");
+
+  const openWorkspace = () => {
+    window.location.assign("/workspace");
+  };
 
   useEffect(() => {
+    if (!auth) {
+      setAuthReady(true);
+      return;
+    }
+
     return onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       setAuthReady(true);
@@ -399,6 +410,11 @@ function App() {
   const handleLogin = async () => {
     setHistoryMessage("");
     setSaveMessage("");
+    if (!auth || !googleProvider) {
+      setHistoryMessage("Firebase 설정 후 Google 로그인을 사용할 수 있습니다.");
+      setSaveMessage("Firebase 환경값이 없어 로그인과 저장 기능이 비활성화되어 있습니다.");
+      return;
+    }
     try {
       await signInWithPopup(auth, googleProvider);
     } catch {
@@ -410,6 +426,7 @@ function App() {
   const handleLogout = async () => {
     setHistoryMessage("");
     setSaveMessage("로그아웃했습니다. 현재 화면의 분석/복사는 가능하지만 저장된 공지는 계정에 연결되지 않습니다.");
+    if (!auth) return;
     await signOut(auth);
   };
 
@@ -459,7 +476,132 @@ function App() {
 
   return (
     <main>
-      <header className="site-header">
+      {!isWorkspacePage && <section className="landing-hero" aria-labelledby="landing-title">
+        <div className="landing-orbit landing-orbit-one" aria-hidden="true" />
+        <div className="landing-orbit landing-orbit-two" aria-hidden="true" />
+
+        <nav className="landing-nav" aria-label="소개 페이지 메뉴">
+          <a className="landing-brand" href="#top" aria-label="KNU Notice AI 홈">
+            <span>K</span>
+            <strong>KNU Notice AI</strong>
+          </a>
+          <div className="landing-nav-links">
+            <a href="#how-it-works">작동 방식</a>
+            <button type="button" onClick={openWorkspace}>공지 만들기</button>
+          </div>
+        </nav>
+
+        <div className="landing-content" id="top">
+          <div className="landing-copy">
+            <p className="landing-kicker">
+              <Sparkles size={15} />
+              강남대학교 공지 제작 AI
+            </p>
+            <h1 id="landing-title">
+              메일 한 통이
+              <span>모든 채널의 공지</span>가 됩니다.
+            </h1>
+            <p className="landing-description">
+              이메일과 첨부파일을 넣으면 핵심 정보를 찾아 검토하고,
+              홈페이지·SNS·메시지·홍보 이미지 초안까지 한 번에 완성합니다.
+            </p>
+            <div className="landing-actions">
+              <button className="landing-primary" type="button" onClick={openWorkspace}>
+                지금 공지 만들기
+                <ArrowRight size={19} />
+              </button>
+              <a className="landing-secondary" href="#how-it-works">
+                30초 만에 이해하기
+              </a>
+            </div>
+            <div className="landing-trust" aria-label="서비스 특징">
+              <span><CheckCircle2 size={15} /> 브라우저에서 안전하게 처리</span>
+              <span><CheckCircle2 size={15} /> 게시 전 담당자 검토</span>
+            </div>
+          </div>
+
+          <div className="product-demo" aria-label="메일이 채널별 공지로 변환되는 과정을 보여주는 화면">
+            <div className="demo-window">
+              <div className="demo-toolbar">
+                <div className="demo-dots" aria-hidden="true"><i /><i /><i /></div>
+                <span><Sparkles size={14} /> Notice AI가 공지를 만들고 있어요</span>
+                <em>LIVE</em>
+              </div>
+
+              <div className="demo-board">
+                <div className="demo-source">
+                  <div className="demo-label"><span>01</span> 자료 입력</div>
+                  <div className="source-card source-mail">
+                    <div className="source-icon"><Mail size={18} /></div>
+                    <div>
+                      <strong>2026 하계 인턴십 모집</strong>
+                      <span>대외협력팀 · 방금 전</span>
+                    </div>
+                    <CheckCircle2 className="source-check" size={17} />
+                  </div>
+                  <div className="source-card source-file">
+                    <div className="source-icon"><Paperclip size={18} /></div>
+                    <div>
+                      <strong>모집요강.pdf</strong>
+                      <span>8페이지 · 분석 완료</span>
+                    </div>
+                    <CheckCircle2 className="source-check" size={17} />
+                  </div>
+                </div>
+
+                <div className="demo-engine" aria-hidden="true">
+                  <div className="engine-line"><i /></div>
+                  <div className="engine-core"><Sparkles size={22} /></div>
+                  <div className="engine-line"><i /></div>
+                </div>
+
+                <div className="demo-result">
+                  <div className="demo-label"><span>02</span> 공지 완성</div>
+                  <div className="result-sheet">
+                    <div className="result-sheet-head">
+                      <span className="result-category">취업·진로</span>
+                      <span className="result-status"><CheckCircle2 size={13} /> 검토 준비</span>
+                    </div>
+                    <h2>2026 하계 인턴십<br />참여자 모집</h2>
+                    <p>재학생을 위한 현장 실무 경험과<br />직무 멘토링 기회를 제공합니다.</p>
+                    <dl>
+                      <div><dt>대상</dt><dd>강남대학교 재학생</dd></div>
+                      <div><dt>기간</dt><dd>7. 1. — 8. 28.</dd></div>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+
+              <div className="channel-strip">
+                <span className="channel-strip-title">채널별 초안 자동 생성</span>
+                <div className="channel-item channel-home"><Monitor size={17} /><strong>홈페이지</strong><i /></div>
+                <div className="channel-item channel-sns"><Hash size={17} /><strong>SNS</strong><i /></div>
+                <div className="channel-item channel-message"><MessageCircle size={17} /><strong>메시지</strong><i /></div>
+                <div className="channel-item channel-image"><ImageIcon size={17} /><strong>홍보 이미지</strong><i /></div>
+              </div>
+            </div>
+            <div className="demo-float demo-float-time">
+              <strong>10분 → 1분</strong>
+              <span>반복 작성 시간 단축</span>
+            </div>
+            <div className="demo-float demo-float-safe">
+              <CheckCircle2 size={18} />
+              <span>근거까지 함께 확인</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="landing-steps" id="how-it-works">
+          <div><span>01</span><strong>메일·파일 넣기</strong><small>EML, PDF, Word, 이미지</small></div>
+          <ArrowRight size={18} aria-hidden="true" />
+          <div><span>02</span><strong>핵심 정보 검토</strong><small>대상, 기간, 혜택, 신청 방법</small></div>
+          <ArrowRight size={18} aria-hidden="true" />
+          <div><span>03</span><strong>채널별 공지 완성</strong><small>글과 이미지 초안을 한 번에</small></div>
+        </div>
+      </section>}
+
+      {isWorkspacePage && <>
+      <header className="site-header" id="notice-workspace">
         <div className="top-line">
           <span>KANGNAM UNIVERSITY</span>
           <span>공지 작성 지원</span>
@@ -471,7 +613,7 @@ function App() {
             <span>Kangnam University Notice Helper</span>
           </div>
           <nav aria-label="서비스 메뉴">
-            <a href="#service">서비스소개</a>
+            <a href="/">서비스 홈</a>
             <a href="#input">자료입력</a>
             <a href="#result">추출결과</a>
             <a href="#history">저장공지</a>
@@ -900,6 +1042,7 @@ function App() {
           )}
         </section>
       </div>
+      </>}
     </main>
   );
 }
