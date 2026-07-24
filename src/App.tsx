@@ -497,6 +497,7 @@ function App() {
           <div className="landing-nav-links">
             <a href="#how-it-works">작동 방식</a>
             <button type="button" onClick={openWorkspace}>공지 만들기</button>
+            <AuthPanel authReady={authReady} user={user} onLogin={handleLogin} onLogout={handleLogout} />
           </div>
         </nav>
 
@@ -706,81 +707,17 @@ function App() {
           ))}
         </ol>
 
-        {currentStep === 1 && <section className="hero">
-          <div className="hero-intro">
-            <p className="eyebrow">이메일·첨부파일 통합 공지 도우미</p>
-            <h1>메일과 첨부파일의 <span>핵심 정보를</span> 한 번에</h1>
-            <p className="hero-copy">
-              이메일, 이미지, PDF, Word, Excel에서 내용을 추출하고 근거와 함께 채널별 공지 초안을 만듭니다.
-            </p>
-            <div className="hero-actions">
-              <a className="primary-button" href="#input">
-                <FileText size={18} />
-                공지 만들기
-              </a>
-              <a className="secondary-button" href="#result">
-                <Sparkles size={18} />
-                결과 미리보기
-              </a>
-            </div>
-            <div className="hero-badges" aria-label="지원 입력 형식">
-              <span>메일 본문</span>
-              <span>PDF</span>
-              <span>DOCX</span>
-              <span>XLSX</span>
-              <span>이미지</span>
-              <span>붙여넣기</span>
-            </div>
+        {currentStep === 1 && <section className="workspace-step-intro" aria-labelledby="input-step-title">
+          <div>
+            <p className="panel-kicker">1단계 · 자료 입력</p>
+            <h1 id="input-step-title">공지로 만들 메일과 첨부파일을 넣어 주세요</h1>
+            <p>본문을 붙여넣거나 EML, PDF, Word, Excel, 이미지 파일을 추가하면 다음 단계에서 핵심 정보와 원문 근거를 검토합니다.</p>
           </div>
-          <div className="landing-preview" aria-label="공지 변환 예시">
-            <div className="preview-mail">
-              <span>예시 메일</span>
-              <strong>2026 비교과 프로그램 신청 안내</strong>
-              <p>대상, 기간, 혜택, 신청 링크가 흩어진 메일과 첨부파일을 함께 분석합니다.</p>
-            </div>
-            <div className="preview-result-grid">
-              <div><span>대상</span><strong>재학생</strong></div>
-              <div><span>기간</span><strong>7.29-8.9</strong></div>
-              <div><span>혜택</span><strong>마일리지</strong></div>
-              <div><span>신청</span><strong>온라인 링크</strong></div>
-            </div>
-            <div className="preview-draft">
-              <span>홈페이지 공지 초안</span>
-              <p>[비교과] AI 역량 강화 프로그램 신청 안내</p>
-            </div>
+          <div className="workspace-step-status">
+            <span>{uploads.length ? `파일 ${uploads.length}개 추가됨` : "파일 추가 전"}</span>
+            <strong>{isProcessing ? "첨부파일 처리 중" : "입력 준비"}</strong>
           </div>
         </section>}
-
-        {currentStep === 1 && <section className="mode-section step-stage" aria-label="로그인 상태별 기능 안내">
-          <div className="mode-heading">
-            <p className="panel-kicker">사용 상태</p>
-            <h2>저장은 Google 로그인 후 Firestore에 보관됩니다</h2>
-          </div>
-          <div className="mode-grid">
-            <div className={!user ? "mode-card is-active" : "mode-card"}>
-              <span>비로그인·게스트</span>
-              <strong>분석, 근거 확인, 초안 복사, PNG 저장 가능</strong>
-              <p>공지 저장은 하지 않습니다. 저장 버튼을 누르면 로그인 안내가 표시됩니다.</p>
-            </div>
-            <div className={user ? "mode-card is-active" : "mode-card"}>
-              <span>Google 로그인</span>
-              <strong>Firestore에 계정별 공지 저장·불러오기 가능</strong>
-              <p>저장된 공지는 화면 하단의 저장된 공지 목록에서 다시 불러옵니다.</p>
-            </div>
-            <div className="mode-card status-card">
-              <span>현재 상태</span>
-              <strong>{authReady ? (user ? "로그인됨 · 저장 가능" : "비로그인 · 저장 불가") : "로그인 상태 확인 중"}</strong>
-              <p>{user ? `${user.email || user.displayName || "현재 계정"}에 연결된 공지로 저장됩니다.` : "Google 로그인 버튼을 누르면 저장 기능이 열립니다."}</p>
-            </div>
-          </div>
-        </section>}
-
-        {currentStep === 1 && <div className="notice">
-          <Sparkles size={20} />
-          <span>
-            파일은 서버에 업로드하지 않고 현재 브라우저에서 처리합니다. 저장 버튼은 직접 입력한 메일 본문과 최종 공지 초안만 Firestore에 저장합니다.
-          </span>
-        </div>}
 
         {currentStep === 1 && <section className="input-workspace step-stage" id="input" aria-label="메일과 첨부파일 입력">
           <div className="input-panel">
