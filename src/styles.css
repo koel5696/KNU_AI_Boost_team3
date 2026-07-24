@@ -68,11 +68,11 @@ button {
   width: 54px;
   height: 54px;
   place-items: center;
-  border: 3px solid #b9d8f2;
+  border: 1px solid #d8e4ef;
   border-radius: 50%;
-  color: var(--blue);
-  font-size: 15px;
-  font-weight: 900;
+  background: #f6f9fc;
+  font-size: 28px;
+  line-height: 1;
 }
 
 .brand-bar strong,
@@ -437,37 +437,39 @@ button:focus-visible {
   margin-bottom: 0;
 }
 
-.review-check {
+.draft-editor-panel {
+  border: 1px solid #cfddea;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fbff;
+}
+
+.draft-editor-panel label {
   display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  margin-bottom: 12px;
-  border: 1px solid #b8d5ee;
-  border-radius: 4px;
-  padding: 12px;
-  background: #f2f8fe;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
   color: #173d63;
-  font-size: 14px;
-  font-weight: 800;
-  line-height: 1.45;
 }
 
-.review-check span {
-  display: grid;
-  gap: 4px;
+.draft-editor-panel label span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
 }
 
-.review-check strong {
-  color: #c81f1f;
-  font-weight: 900;
+.draft-editor {
+  min-height: 320px;
+  resize: vertical;
+  background: #fff;
+  line-height: 1.65;
 }
 
-.review-check input {
-  width: 18px;
-  height: 18px;
-  margin-top: 1px;
-  accent-color: var(--blue);
-  flex: 0 0 auto;
+.draft-editor-panel p {
+  margin: 9px 2px 0;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 pre {
