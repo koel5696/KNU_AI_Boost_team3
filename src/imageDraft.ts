@@ -282,21 +282,24 @@ function renderImageDraft(draft: ImageDraft) {
   return canvas;
 }
 
-export async function downloadImageDraft(draft: ImageDraft) {
-  await document.fonts?.ready;
+export function downloadImageDraft(draft: ImageDraft) {
   const canvas = renderImageDraft(draft);
-  const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((value) => {
-      if (value) resolve(value);
-      else reject(new Error("PNG 이미지 생성에 실패했습니다."));
-    }, "image/png");
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
   const templateName = draft.template === "promotional" ? "홍보용" : "안내용";
-  link.href = url;
-  link.download = `강남대학교_${draft.category.replace(/[^0-9A-Za-z가-힣]/g, "_")}_${templateName}.png`;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
-  return link.download;
+  const fileName = `강남대학교_${draft.category.replace(/[^0-9A-Za-z가-힣]/g, "_")}_${templateName}.png`;
+  const link = document.createElement("a");
+
+  // Keep image creation and the download click in the original user gesture.
+  // Some browsers block the previous asynchronous Blob download after the
+  // click's user activation has expired.
+  link.href = canvas.toDataURL("image/png");
+  link.download = fileName;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+  }
+
+  return fileName;
 }

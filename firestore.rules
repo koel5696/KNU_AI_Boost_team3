@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function ownsNotice() {
+      return signedIn() && request.auth.uid == resource.data.userId;
+    }
+
+    function createsOwnNotice() {
+      return signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          'userId',
+          'title',
+          'category',
+          'body',
+          'copyText',
+          'sourceMail',
+          'extractedInfo',
+          'createdAtMs',
+          'createdAt',
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.category is string
+        && request.resource.data.body is string
+        && request.resource.data.copyText is string
+        && request.resource.data.sourceMail is string
+        && request.resource.data.extractedInfo is map
+        && request.resource.data.createdAtMs is int;
+    }
+
+    match /notices/{noticeId} {
+      allow create: if createsOwnNotice();
+      allow read, delete: if ownsNotice();
+      allow update: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
