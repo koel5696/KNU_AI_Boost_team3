@@ -1,6 +1,6 @@
 import type { Attachment } from "postal-mime";
 
-export type DocumentKind = "email" | "image" | "pdf" | "docx" | "text";
+export type DocumentKind = "email" | "image" | "pdf" | "docx" | "spreadsheet" | "text";
 
 export type ProcessedSource = {
   id: string;
@@ -31,6 +31,7 @@ export const ACCEPTED_FILE_TYPES = [
   ".htm",
   ".pdf",
   ".docx",
+  ".xlsx",
   ".png",
   ".jpg",
   ".jpeg",
@@ -167,6 +168,31 @@ async function processDocx(file: File) {
   const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
   const warnings = result.messages.map((message) => message.message);
   return [source(file, "docx", result.value, { warnings })];
+}
+
+function spreadsheetCellText(value: unknown) {
+  if (value == null) return "";
+  if (value instanceof Date) return value.toLocaleDateString("ko-KR");
+  return String(value).trim();
+}
+
+async function processSpreadsheet(file: File) {
+  const { default: readXlsxFile } = await import("read-excel-file/browser");
+  const sheets = await readXlsxFile(file);
+  const sections = sheets
+    .map((sheet) => {
+      const rows = sheet.data
+        .map((row) => row.map(spreadsheetCellText).filter(Boolean).join(" | "))
+        .filter(Boolean);
+      return rows.length ? `[시트: ${sheet.sheet}]\n${rows.join("\n")}` : "";
+    })
+    .filter(Boolean);
+
+  return [
+    source(file, "spreadsheet", sections.join("\n\n"), {
+      warnings: sections.length ? [] : ["스프레드시트에서 분석할 텍스트를 찾지 못했습니다."],
+    }),
+  ];
 }
 
 async function loadImage(file: File) {
@@ -323,6 +349,7 @@ export async function processDocumentFile(
 
   if (extension === ".eml") return processEmail(file, onProgress, depth);
   if (extension === ".docx") return processDocx(file);
+  if (extension === ".xlsx") return processSpreadsheet(file);
   if (extension === ".pdf") return processPdf(file, onProgress);
   if ([".png", ".jpg", ".jpeg", ".webp", ".bmp", ".heic", ".heif"].includes(extension)) {
     return processImage(file, onProgress);

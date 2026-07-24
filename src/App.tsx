@@ -458,7 +458,7 @@ function App() {
             <p className="eyebrow">이메일·첨부파일 통합 공지 도우미</p>
             <h1>메일과 첨부파일의 핵심 정보를 한 번에</h1>
             <p className="hero-copy">
-              이메일, 이미지, PDF, Word에서 내용을 추출하고 근거와 함께 채널별 공지 초안을 만듭니다.
+              이메일, 이미지, PDF, Word, Excel에서 내용을 추출하고 근거와 함께 채널별 공지 초안을 만듭니다.
             </p>
           </div>
           <div className="notice">
@@ -526,7 +526,7 @@ function App() {
             >
               <Upload size={28} />
               <strong>파일을 끌어놓거나 클릭해 선택</strong>
-              <span>EML, PDF, DOCX, PNG, JPG, HEIC · 파일당 최대 20MB</span>
+              <span>EML, PDF, DOCX, XLSX, PNG, JPG, HEIC · 파일당 최대 20MB</span>
             </div>
 
             {uploads.length > 0 && (
@@ -878,7 +878,7 @@ function UploadRow({ upload, onRemove }: { upload: UploadItem; onRemove: (id: st
     ? Mail
     : /\.(png|jpe?g|webp|bmp|heic|heif)$/i.test(upload.fileName)
       ? ImageIcon
-      : /\.(docx|pdf)$/i.test(upload.fileName)
+      : /\.(docx|xlsx|pdf)$/i.test(upload.fileName)
         ? FileArchive
         : Paperclip;
   const warningCount = upload.sources.reduce((sum, source) => sum + source.warnings.length, 0);
