@@ -420,7 +420,7 @@ function App() {
     setSaveMessage("");
     if (!auth || !googleProvider) {
       setHistoryMessage("Firebase 설정 후 Google 로그인을 사용할 수 있습니다.");
-      setSaveMessage("Firebase 환경 설정 후 Google 로그인과 공지 저장 기능을 사용할 수 있습니다.");
+      setSaveMessage("Firebase 환경값이 없어 로그인과 저장 기능이 비활성화되어 있습니다.");
       return;
     }
     try {
