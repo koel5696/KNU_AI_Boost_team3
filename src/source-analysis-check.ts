@@ -110,4 +110,56 @@ assert(genericTableAnalysis.info.period.includes("2026-08-12 ~ 2026-08-14"), "�
 const greetingAudienceAnalysis = analyzeSources("대학생 여러분 안녕하세요. 진로센터에서 프로그램 참가자를 모집합니다.", []);
 assert(greetingAudienceAnalysis.info.audience === "대학생", "일반 인사말 문장에서 대상 명사만 추출되어야 합니다.");
 
-console.log("source-analysis-check: 후보 랭킹, 날짜 정규화, 신청 링크 우선, 기간 분리, 이미지 표 다중 프로그램 통과");
+const publicAgencyMail = `제목: 2026 청년 디지털 역량 강화 교육생 모집 안내
+
+모집 대상: 서울 거주 만 19세~34세 미취업 청년
+교육 기간: 2026. 8. 24.(월)~9. 18.(금)
+모집 마감: 2026. 8. 14.(금) 18:00
+참가 비용: 전액 무료
+신청 방법: 센터 홈페이지 온라인 신청
+문의: 서울청년지원센터 교육운영팀 02-1111-2222`;
+
+const publicAgencyAnalysis = analyzeSources(publicAgencyMail, []);
+assert(publicAgencyAnalysis.info.period.includes("신청: 2026-08-14 18:00"), "요일이 포함된 신청 마감일이 정규화되어야 합니다.");
+assert(publicAgencyAnalysis.info.period.includes("행사/운영: 2026-08-24 ~ 2026-09-18"), "연도가 생략된 교육 종료일이 정규화되어야 합니다.");
+assert(publicAgencyAnalysis.info.contact === "02-1111-2222", "문의처에서 부서명 대신 전화번호가 선택되어야 합니다.");
+
+const municipalityMail = `가. 접수 기간: 2026. 8. 10.~9. 4.
+나. 참가 자격: 시정에 관심 있는 국민 누구나
+다. 제출 방법: 담당자 이메일 접수
+라. 시상 규모: 총상금 1,000만 원
+연락처: 031-444-5555`;
+
+const municipalityAnalysis = analyzeSources(municipalityMail, []);
+assert(municipalityAnalysis.info.period === "2026-08-10 ~ 2026-09-04", "지자체형 축약 날짜 범위가 정규화되어야 합니다.");
+assert(municipalityAnalysis.info.applyMethod === "담당자 이메일 접수", "담당자 이메일 접수는 신청 방법으로 유지되어야 합니다.");
+
+const overseasMail = `Subject: Call for Participants – Global Youth Leadership Program 2026
+
+Program Period: October 12–16, 2026
+Eligibility: Undergraduate students aged 18–25
+Application Deadline: August 31, 2026, 23:59 KST
+Contact: globalprogram@example.sg`;
+
+const overseasAnalysis = analyzeSources(overseasMail, []);
+assert(overseasAnalysis.info.category === "모집", "영문 모집 안내도 유형이 비어 있지 않아야 합니다.");
+assert(overseasAnalysis.info.period.includes("신청: August 31, 2026, 23:59 KST"), "영문 신청 마감이 기간에 포함되어야 합니다.");
+assert(overseasAnalysis.info.period.includes("행사/운영: October 12 ~ 16, 2026"), "영문 프로그램 기간이 기간에 포함되어야 합니다.");
+
+const internalPhoneAnalysis = analyzeSources("내선번호: 3051", []);
+assert(internalPhoneAnalysis.info.contact === "내선 3051", "내선번호도 문의처로 추출되어야 합니다.");
+
+const correctionMail = `기존 마감일: 2026년 8월 7일
+변경 마감일: 2026년 8월 16일 오후 6시
+문의: 청년정책네트워크 운영팀
+02-7777-8888 / youth@example.kr`;
+
+const correctionAnalysis = analyzeSources(correctionMail, []);
+assert(correctionAnalysis.info.period === "2026-08-16까지", "수정 안내에서는 변경 마감일이 기존 마감일보다 우선되어야 합니다.");
+assert(correctionAnalysis.info.contact === "02-7777-8888", "문의처에서 운영팀명 대신 연락 가능한 값이 선택되어야 합니다.");
+
+const smallAssociationAnalysis = analyzeSources("다음 달에 취업 특강을 엽니다. 참가비는 없고 온라인으로 진행합니다. 문의는 010-0000-1234로 부탁드립니다.", []);
+assert(smallAssociationAnalysis.info.period === "다음 달에", "정확한 날짜가 없으면 상대 기간을 보존해야 합니다.");
+assert(smallAssociationAnalysis.info.benefit === "참가비 없음", "참가비 없음 표현이 혜택으로 정리되어야 합니다.");
+
+console.log("source-analysis-check: 후보 랭킹, 날짜 정규화, 신청 링크 우선, 기간 분리, 이미지 표 다중 프로그램, 기관별 메일 변형 통과");

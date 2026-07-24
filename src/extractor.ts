@@ -30,6 +30,9 @@ const ENDING_PATTERN = /(합니다|됩니다|주세요|있습니다|바랍니다
 const FULL_PHONE_PATTERN = /(?:0[0-9]{1,2})-[0-9]{3,4}-[0-9]{4}/;
 const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 const AUDIENCE_NOUN_PATTERN = /(강남대학교\s*)?(재학생|휴학생|대학생|대학원생|학부생|신입생|졸업생|청년|교직원|지역\s*주민)/g;
+const ORGANIZATION_PATTERN = /센터|팀|재단|기관|사무국|운영팀|지원센터|네트워크|연구원|협회|그룹/;
+const OMITTED_YEAR_DOTTED_RANGE_PATTERN =
+  /(20\d{2})\s*[.]\s*(\d{1,2})\s*[.]\s*(\d{1,2})\s*[.]?\s*(?:\([^)]*\))?\s*~\s*(?:(20\d{2})\s*[.]\s*)?(\d{1,2})\s*[.]\s*(\d{1,2})\s*[.]?/;
 
 export const sampleMail = `제목: 청년 대상 AI 직무교육 참가자 모집
 
@@ -73,6 +76,7 @@ export function inferCategory(text: string) {
   if (/토크콘서트|행사|특강|콘서트/.test(text)) return "행사/특강";
   if (/인턴|연구/.test(text)) return "인턴/연구";
   if (/교육|강의|직무|훈련|프로그램/.test(text)) return "교육/직무훈련";
+  if (/leadership|program|participants|application|eligibility/i.test(text)) return "모집";
   if (/모집|참가자|신청/.test(text)) return "모집";
   if (/장학|지원금|혜택/.test(text)) return "지원/혜택";
   return "";
@@ -86,6 +90,7 @@ function cleanApplyMethod(value: string) {
     ?.replace(/^(신청은|신청 방법은|신청\s*[:：-]?)/, "")
     .replace(/에서\s*가능하고\s*$/, "")
     .replace(/에서\s*가능하며\s*$/, "")
+    .replace(/에서\s*진행됩니다.*$/, "")
     .replace(/에\s*제출해\s*주세요\s*$/, "")
     .replace(/해\s*주세요\s*$/, "")
     .replace(/고\s*$/, "")
@@ -101,6 +106,8 @@ function normalizeAudience(value: string) {
     .replace(/[,，]\s*$/, "")
     .replace(/[.。]\s*$/, "")
     .trim();
+
+  if (ORGANIZATION_PATTERN.test(normalized) && !/대상|자격|거주|미취업|학생|재학생|휴학생|국민/.test(normalized)) return "";
 
   if (/안녕하세요|반갑습니다|초대합니다|여러분/.test(normalized) && !/대상|자격/.test(normalized)) {
     const audienceNouns = [...normalized.matchAll(AUDIENCE_NOUN_PATTERN)]
@@ -134,7 +141,8 @@ function cleanPeriod(value: string) {
   if (!value) return "";
   if (/되면|마감되면|조기 종료|연장 안내|할 예정입니다/.test(value)) return "";
 
-  const normalized = value
+  const omittedRange = normalizeOmittedYearDottedRange(value);
+  const normalized = (omittedRange || value)
     .replace(/^(마감|모집 마감|변경 마감일|교육 기간|프로그램 기간|활동 기간|근무 기간|접수 기간|일시|접수는|Program Period|Application Deadline)\s*[:：]?\s*/i, "")
     .replace(/^서류\s*접수는\s*/, "")
     .replace(/^은\s*/, "")
@@ -146,6 +154,14 @@ function cleanPeriod(value: string) {
     .trim();
   if (/되면|마감되면|조기 종료|연장 안내|할 예정|진행됩니다|진행되며/.test(normalized)) return "";
   return normalized;
+}
+
+function normalizeOmittedYearDottedRange(value: string) {
+  const match = value.match(OMITTED_YEAR_DOTTED_RANGE_PATTERN);
+  if (!match) return "";
+  const [, startYear, startMonth, startDay, endYearRaw, endMonth, endDay] = match;
+  const endYear = endYearRaw || startYear;
+  return `${startYear}-${startMonth.padStart(2, "0")}-${startDay.padStart(2, "0")} ~ ${endYear}-${endMonth.padStart(2, "0")}-${endDay.padStart(2, "0")}`;
 }
 
 function extractPeriod(text: string) {
@@ -163,6 +179,7 @@ function extractPeriod(text: string) {
       /(20[0-9]{2}[년.-]\s*[0-9]{1,2}[월.-]\s*[0-9]{1,2}일?까지?)/,
       /([0-9]{1,2}월\s*[0-9]{1,2}일까지)/,
       /(August\s*[0-9]{1,2},\s*20[0-9]{2}[^.\n]*)/,
+      /(다음\s*달에?)/,
     ]);
 
   if (applicationPeriod) return cleanPeriod(applicationPeriod);
@@ -182,13 +199,14 @@ function extractPeriod(text: string) {
 function cleanBenefit(value: string) {
   if (!value) return "";
   if (/지원할|지원자는|모집합니다|참가자 모집/.test(value)) return "";
-  return value.trim();
+  return value.replace(/참가비는\s*없고?/, "참가비 없음").trim();
 }
 
 function extractContact(text: string) {
   const phone = text.match(FULL_PHONE_PATTERN)?.[0];
   const email = text.match(EMAIL_PATTERN)?.[0];
-  return phone || email || "";
+  const extension = text.match(/내선(?:번호)?\s*[:：]?\s*(\d{3,4})/)?.[1];
+  return phone || email || (extension ? `내선 ${extension}` : "");
 }
 
 export function extractInfo(text: string): ExtractedInfo {
@@ -229,6 +247,7 @@ export function extractInfo(text: string): ExtractedInfo {
       /(전액\s*무료)/,
       /(무료)/,
       /(무료[^.\n]*)/,
+      /(참가비는\s*없고?)/,
       /(지원[^.\n]*)/,
       /(혜택[^.\n]*)/,
     ])),
