@@ -87,15 +87,110 @@ const channelLabels: Record<Channel, string> = {
   message: "메시지",
 };
 
+const SESSION_DRAFT_KEY = "knu-notice-ai-session-draft";
+
+type SessionDraftState = {
+  mailText: string;
+  analysis: AnalysisResult | null;
+  loadedResult: ExtractedInfo | null;
+  draftTexts: ChannelDraftTexts | null;
+  activeChannel: Channel;
+  currentStep: WorkflowStep;
+  copyReviewConfirmed: boolean;
+};
+
+const channels: Channel[] = ["homepage", "sns", "message"];
+const workflowSteps: WorkflowStep[] = [1, 2, 3, 4, 5];
+
+function isChannel(value: unknown): value is Channel {
+  return typeof value === "string" && channels.includes(value as Channel);
+}
+
+function isWorkflowStep(value: unknown): value is WorkflowStep {
+  return typeof value === "number" && workflowSteps.includes(value as WorkflowStep);
+}
+
+function isDraftTexts(value: unknown): value is ChannelDraftTexts {
+  if (!value || typeof value !== "object") return false;
+  const draft = value as Partial<ChannelDraftTexts>;
+  return channels.every((channel) => typeof draft[channel] === "string");
+}
+
+function loadSessionDraft(): SessionDraftState | null {
+  try {
+    const historyDraft = window.history.state?.[SESSION_DRAFT_KEY] as Partial<SessionDraftState> | undefined;
+    const raw = historyDraft ? JSON.stringify(historyDraft) : window.sessionStorage.getItem(SESSION_DRAFT_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<SessionDraftState>;
+    const hasResult = Boolean(parsed.analysis || parsed.loadedResult);
+    const currentStep =
+      isWorkflowStep(parsed.currentStep) && (hasResult || parsed.currentStep === 1 || parsed.currentStep === 5)
+        ? parsed.currentStep
+        : 1;
+
+    return {
+      mailText: typeof parsed.mailText === "string" ? parsed.mailText : sampleMail,
+      analysis: parsed.analysis ?? null,
+      loadedResult: parsed.loadedResult ?? null,
+      draftTexts: isDraftTexts(parsed.draftTexts) ? parsed.draftTexts : null,
+      activeChannel: isChannel(parsed.activeChannel) ? parsed.activeChannel : "homepage",
+      currentStep,
+      copyReviewConfirmed: Boolean(parsed.copyReviewConfirmed),
+    };
+  } catch {
+    window.sessionStorage.removeItem(SESSION_DRAFT_KEY);
+    return null;
+  }
+}
+
+function saveSessionDraft(state: SessionDraftState) {
+  try {
+    window.sessionStorage.setItem(SESSION_DRAFT_KEY, JSON.stringify(state));
+  } catch {
+    // Session storage can fail in private mode or when the browser quota is full.
+  }
+  try {
+    window.history.replaceState(
+      { ...(window.history.state || {}), [SESSION_DRAFT_KEY]: state },
+      "",
+      window.location.href,
+    );
+  } catch {
+    // History state is only a same-tab backup; failing to write it should not break editing.
+  }
+}
+
+function clearSessionDraft() {
+  try {
+    window.sessionStorage.removeItem(SESSION_DRAFT_KEY);
+  } catch {
+    // Nothing to recover here; the in-memory state is still reset.
+  }
+  try {
+    const nextState = { ...(window.history.state || {}) };
+    delete nextState[SESSION_DRAFT_KEY];
+    window.history.replaceState(nextState, "", window.location.href);
+  } catch {
+    // Ignore history cleanup failures.
+  }
+}
+
 function App() {
-  const [mailText, setMailText] = useState(sampleMail);
+  const restoredSessionRef = useRef<SessionDraftState | null | undefined>(undefined);
+  if (restoredSessionRef.current === undefined) {
+    restoredSessionRef.current = loadSessionDraft();
+  }
+  const restoredSession = restoredSessionRef.current;
+
+  const [mailText, setMailText] = useState(restoredSession?.mailText ?? sampleMail);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
-  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
-  const [loadedResult, setLoadedResult] = useState<ExtractedInfo | null>(null);
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(restoredSession?.analysis ?? null);
+  const [loadedResult, setLoadedResult] = useState<ExtractedInfo | null>(restoredSession?.loadedResult ?? null);
   const [error, setError] = useState("");
   const [copyState, setCopyState] = useState("홈페이지 초안 복사");
-  const [draftTexts, setDraftTexts] = useState<ChannelDraftTexts | null>(null);
-  const [activeChannel, setActiveChannel] = useState<Channel>("homepage");
+  const [draftTexts, setDraftTexts] = useState<ChannelDraftTexts | null>(restoredSession?.draftTexts ?? null);
+  const [activeChannel, setActiveChannel] = useState<Channel>(restoredSession?.activeChannel ?? "homepage");
   const [imageStatus, setImageStatus] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [user, setUser] = useState<User | null>(null);
@@ -104,8 +199,10 @@ function App() {
   const [historyMessage, setHistoryMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [currentStep, setCurrentStep] = useState<WorkflowStep>(1);
+  const [currentStep, setCurrentStep] = useState<WorkflowStep>(restoredSession?.currentStep ?? 1);
+  const [copyReviewConfirmed, setCopyReviewConfirmed] = useState(restoredSession?.copyReviewConfirmed ?? false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sessionSnapshotRef = useRef<SessionDraftState | null>(null);
   const isWorkspacePage = window.location.pathname.startsWith("/workspace");
 
   const moveToStep = (step: WorkflowStep) => {
@@ -115,6 +212,23 @@ function App() {
 
   const openWorkspace = () => {
     window.location.assign("/workspace");
+  };
+
+  const returnToLandingTop = () => {
+    window.location.assign("/");
+  };
+
+  const persistSessionNow = (overrides: Partial<SessionDraftState>) => {
+    saveSessionDraft({
+      mailText,
+      analysis,
+      loadedResult,
+      draftTexts,
+      activeChannel,
+      currentStep,
+      copyReviewConfirmed,
+      ...overrides,
+    });
   };
 
   useEffect(() => {
@@ -131,7 +245,7 @@ function App() {
 
       if (!currentUser) {
         setSavedNotices([]);
-        setSaveMessage("비로그인 상태입니다. 분석과 복사는 가능하지만 저장은 Google 로그인 후 사용할 수 있습니다.");
+        setSaveMessage("비로그인 상태입니다. 분석과 복사는 가능하지만 저장은 로그인 후 사용할 수 있습니다.");
         return;
       }
 
@@ -140,7 +254,7 @@ function App() {
         setSavedNotices(notices);
         setSaveMessage(`${currentUser.displayName || "로그인 사용자"} 계정으로 저장할 수 있습니다. 저장된 공지는 아래 목록에서 다시 불러옵니다.`);
       } catch {
-        setHistoryMessage("저장된 공지를 불러오지 못했습니다. Firestore 설정을 확인해 주세요.");
+        setHistoryMessage("저장된 공지를 불러오지 못했습니다. 저장 설정을 확인해 주세요.");
       }
     });
   }, []);
@@ -178,12 +292,116 @@ function App() {
       return;
     }
 
-    setDraftTexts({
+    const generatedDrafts = {
       homepage: channelDrafts.homepage,
       sns: channelDrafts.sns,
       message: channelDrafts.message,
-    });
+    };
+    setDraftTexts((current) => current ?? generatedDrafts);
   }, [channelDrafts]);
+
+  useEffect(() => {
+    sessionSnapshotRef.current = {
+      mailText,
+      analysis,
+      loadedResult,
+      draftTexts,
+      activeChannel,
+      currentStep,
+      copyReviewConfirmed,
+    };
+
+    const hasSessionWork =
+      mailText !== sampleMail ||
+      Boolean(analysis) ||
+      Boolean(loadedResult) ||
+      Boolean(draftTexts) ||
+      activeChannel !== "homepage" ||
+      currentStep !== 1 ||
+      copyReviewConfirmed;
+
+    if (!hasSessionWork) {
+      clearSessionDraft();
+      return;
+    }
+
+    saveSessionDraft({
+      mailText,
+      analysis,
+      loadedResult,
+      draftTexts,
+      activeChannel,
+      currentStep,
+      copyReviewConfirmed,
+    });
+  }, [activeChannel, analysis, copyReviewConfirmed, currentStep, draftTexts, loadedResult, mailText]);
+
+  useEffect(() => {
+    const flushVisibleDraft = () => {
+      const snapshot = sessionSnapshotRef.current;
+      if (!snapshot) return;
+
+      const editor = document.getElementById(`draft-editor-${snapshot.activeChannel}`);
+      const checkbox = document.getElementById(`copy-review-${snapshot.activeChannel}`);
+      const visibleDraftTexts =
+        editor instanceof HTMLTextAreaElement && snapshot.draftTexts
+          ? { ...snapshot.draftTexts, [snapshot.activeChannel]: editor.value }
+          : snapshot.draftTexts;
+
+      saveSessionDraft({
+        ...snapshot,
+        draftTexts: visibleDraftTexts,
+        copyReviewConfirmed:
+          checkbox instanceof HTMLInputElement ? checkbox.checked : snapshot.copyReviewConfirmed,
+      });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flushVisibleDraft();
+    };
+
+    window.addEventListener("beforeunload", flushVisibleDraft);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    const syncTimer = window.setInterval(flushVisibleDraft, 700);
+    return () => {
+      window.removeEventListener("beforeunload", flushVisibleDraft);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(syncTimer);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleNativeDraftInput = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLTextAreaElement) || !target.id.startsWith("draft-editor-")) return;
+
+      const channel = target.id.replace("draft-editor-", "");
+      if (!isChannel(channel)) return;
+
+      setDraftTexts((drafts) => {
+        if (!drafts) return drafts;
+        const nextDrafts = { ...drafts, [channel]: target.value };
+        const snapshot = sessionSnapshotRef.current;
+        if (snapshot) {
+          saveSessionDraft({
+            ...snapshot,
+            draftTexts: nextDrafts,
+            copyReviewConfirmed: false,
+          });
+        }
+        return nextDrafts;
+      });
+      setCopyReviewConfirmed(false);
+      setCopyState(`${channelLabels[channel]} 초안 복사`);
+    };
+
+    document.addEventListener("input", handleNativeDraftInput, true);
+    document.addEventListener("change", handleNativeDraftInput, true);
+    return () => {
+      document.removeEventListener("input", handleNativeDraftInput, true);
+      document.removeEventListener("change", handleNativeDraftInput, true);
+    };
+  }, []);
 
   const missingItems = useMemo(() => {
     if (!result) return [];
@@ -309,11 +527,12 @@ function App() {
 
   const handleGenerate = () => {
     setActiveChannel("homepage");
+    setCopyReviewConfirmed(false);
     setCopyState("홈페이지 초안 복사");
     setImageStatus("");
     setError("");
     setHistoryMessage("");
-    setSaveMessage(user ? "분석 결과가 갱신되었습니다. 검토 후 저장하면 Firestore의 저장된 공지 목록에 추가됩니다." : "분석 결과가 갱신되었습니다. 비로그인 상태에서는 복사와 이미지 저장만 가능하고, 공지 저장은 로그인 후 가능합니다.");
+    setSaveMessage(user ? "분석 결과가 갱신되었습니다. 검토 후 저장하면 저장된 공지 목록에 추가됩니다." : "분석 결과가 갱신되었습니다. 비로그인 상태에서는 복사와 이미지 저장만 가능하고, 공지 저장은 로그인 후 가능합니다.");
 
     if (isProcessing) {
       setError("파일 처리가 끝난 뒤 내용을 정리해 주세요.");
@@ -328,8 +547,26 @@ function App() {
 
     try {
       setLoadedResult(null);
-      setAnalysis(analyzeSources(mailText, allSources));
+      const nextAnalysis = analyzeSources(mailText, allSources);
+      const nextPost = buildHomepagePost(nextAnalysis.info);
+      const nextSns = buildSnsPost(nextAnalysis.info);
+      const nextMessage = buildMessageDraft(nextAnalysis.info);
+      const nextDraftTexts = {
+        homepage: nextPost.copyText,
+        sns: nextSns.copyText,
+        message: nextMessage.copyText,
+      };
+      setAnalysis(nextAnalysis);
+      setDraftTexts(nextDraftTexts);
       setCurrentStep(2);
+      persistSessionNow({
+        analysis: nextAnalysis,
+        loadedResult: null,
+        draftTexts: nextDraftTexts,
+        activeChannel: "homepage",
+        currentStep: 2,
+        copyReviewConfirmed: false,
+      });
     } catch {
       setAnalysis(null);
       setLoadedResult(null);
@@ -338,14 +575,16 @@ function App() {
   };
 
   const handleReset = () => {
+    clearSessionDraft();
     setMailText("");
     setUploads([]);
     setAnalysis(null);
     setLoadedResult(null);
     setError("");
     setHistoryMessage("");
-    setSaveMessage(user ? "입력을 초기화했습니다. 새 공지를 만든 뒤 저장할 수 있습니다." : "입력을 초기화했습니다. 저장 기능은 Google 로그인 후 사용할 수 있습니다.");
+    setSaveMessage(user ? "입력을 초기화했습니다. 새 공지를 만든 뒤 저장할 수 있습니다." : "입력을 초기화했습니다. 저장 기능은 로그인 후 사용할 수 있습니다.");
     setActiveChannel("homepage");
+    setCopyReviewConfirmed(false);
     setCopyState("홈페이지 초안 복사");
     setImageStatus("");
     setCurrentStep(1);
@@ -355,10 +594,16 @@ function App() {
     setUploads((current) => current.filter((upload) => upload.id !== id));
     setAnalysis(null);
     setLoadedResult(null);
+    setCopyReviewConfirmed(false);
   };
 
   const handleCopy = async () => {
     if (!draftTexts) return;
+    if (!copyReviewConfirmed) {
+      setCopyState("검토 체크 후 복사");
+      return;
+    }
+
     try {
       await navigator.clipboard.writeText(draftTexts[activeChannel]);
       setCopyState(`${channelLabels[activeChannel]} 초안 복사됨`);
@@ -368,7 +613,13 @@ function App() {
   };
 
   const handleDraftChange = (value: string) => {
-    setDraftTexts((drafts) => (drafts ? { ...drafts, [activeChannel]: value } : drafts));
+    setDraftTexts((drafts) => {
+      if (!drafts) return drafts;
+      const nextDrafts = { ...drafts, [activeChannel]: value };
+      persistSessionNow({ draftTexts: nextDrafts, copyReviewConfirmed: false });
+      return nextDrafts;
+    });
+    setCopyReviewConfirmed(false);
     setCopyState(`${channelLabels[activeChannel]} 초안 복사`);
   };
 
@@ -413,21 +664,23 @@ function App() {
       };
     });
     setLoadedResult((current) => (current ? { ...current, [key]: value } : current));
+    setDraftTexts(null);
+    setCopyReviewConfirmed(false);
   };
 
   const handleLogin = async () => {
     setHistoryMessage("");
     setSaveMessage("");
     if (!auth || !googleProvider) {
-      setHistoryMessage("Firebase 설정 후 Google 로그인을 사용할 수 있습니다.");
-      setSaveMessage("Firebase 환경값이 없어 로그인과 저장 기능이 비활성화되어 있습니다.");
+      setHistoryMessage("로그인 설정 후 저장 기능을 사용할 수 있습니다.");
+      setSaveMessage("로그인 설정이 없어 로그인과 저장 기능이 비활성화되어 있습니다.");
       return;
     }
     try {
       await signInWithPopup(auth, googleProvider);
     } catch {
-      setHistoryMessage("Google 로그인에 실패했습니다. Firebase Authentication 설정을 확인해 주세요.");
-      setSaveMessage("로그인에 실패해 저장 기능을 사용할 수 없습니다. Firebase Authentication 설정을 확인해 주세요.");
+      setHistoryMessage("로그인에 실패했습니다. 로그인 설정을 확인해 주세요.");
+      setSaveMessage("로그인에 실패해 저장 기능을 사용할 수 없습니다. 로그인 설정을 확인해 주세요.");
     }
   };
 
@@ -441,7 +694,7 @@ function App() {
   const handleSave = async () => {
     if (!user) {
       setHistoryMessage("로그인해야 공지를 저장할 수 있습니다.");
-      setSaveMessage("저장하지 않았습니다. Google 로그인 후 저장하면 Firestore에 계정별 공지로 보관됩니다.");
+      setSaveMessage("저장하지 않았습니다. 로그인 후 저장하면 계정별 공지로 보관됩니다.");
       return;
     }
     if (!post || !result) {
@@ -451,7 +704,7 @@ function App() {
 
     setIsSaving(true);
     setHistoryMessage("");
-    setSaveMessage("Firestore에 공지 초안을 저장하는 중입니다.");
+    setSaveMessage("공지 초안을 저장하는 중입니다.");
     try {
       const saved = await saveNoticeDraft({
         userId: user.uid,
@@ -463,8 +716,8 @@ function App() {
       setHistoryMessage("현재 공지 초안을 저장했습니다.");
       setSaveMessage("저장되었습니다. 아래 저장된 공지 목록 맨 위에서 다시 불러올 수 있습니다.");
     } catch {
-      setHistoryMessage("공지 저장에 실패했습니다. Firestore 권한과 규칙을 확인해 주세요.");
-      setSaveMessage("저장에 실패했습니다. Firestore 권한, 규칙, 네트워크 상태를 확인해 주세요.");
+      setHistoryMessage("공지 저장에 실패했습니다. 저장 권한과 설정을 확인해 주세요.");
+      setSaveMessage("저장에 실패했습니다. 저장 권한, 설정, 네트워크 상태를 확인해 주세요.");
     } finally {
       setIsSaving(false);
     }
@@ -475,7 +728,13 @@ function App() {
     setUploads([]);
     setAnalysis(null);
     setLoadedResult(notice.extractedInfo);
+    setDraftTexts({
+      homepage: notice.post.copyText,
+      sns: buildSnsPost(notice.extractedInfo).copyText,
+      message: buildMessageDraft(notice.extractedInfo).copyText,
+    });
     setActiveChannel("homepage");
+    setCopyReviewConfirmed(false);
     setCopyState("홈페이지 초안 복사");
     setImageStatus("");
     setHistoryMessage("저장된 공지를 현재 작업 화면으로 불러왔습니다.");
@@ -490,10 +749,10 @@ function App() {
         <div className="landing-orbit landing-orbit-two" aria-hidden="true" />
 
         <nav className="landing-nav" aria-label="소개 페이지 메뉴">
-          <a className="landing-brand" href="#top" aria-label="KNU Notice AI 홈">
+          <button className="landing-brand" type="button" onClick={returnToLandingTop} aria-label="KNU Notice AI 홈">
             <span>K</span>
             <strong>KNU Notice AI</strong>
-          </a>
+          </button>
           <div className="landing-nav-links">
             <a href="#how-it-works">작동 방식</a>
             <button type="button" onClick={openWorkspace}>공지 만들기</button>
@@ -646,7 +905,7 @@ function App() {
         </div>
 
         <div className="flow-summary">
-          <div><strong>저장 위치</strong><span>Google 로그인 후 Firestore의 계정별 저장 공지에 보관됩니다.</span></div>
+          <div><strong>저장</strong><span>로그인하면 만든 공지를 저장하고 다시 불러올 수 있습니다.</span></div>
           <div><strong>보안 흐름</strong><span>파일 분석은 브라우저에서 처리하고 저장 시 공지 초안 정보만 전송합니다.</span></div>
           <button className="landing-primary" type="button" onClick={openWorkspace}>
             작업 공간 열기
@@ -658,10 +917,10 @@ function App() {
       {isWorkspacePage && <>
       <header className="site-header" id="notice-workspace">
         <div className="brand-bar">
-          <a className="workspace-brand" href="#top" aria-label="KNU Notice AI 첫 화면">
+          <button className="workspace-brand" type="button" onClick={returnToLandingTop} aria-label="KNU Notice AI 첫 화면">
             <span aria-hidden="true">📣</span>
             <strong>KNU Notice AI</strong>
-          </a>
+          </button>
           <div className="workspace-context">
             <small>강남대학교</small>
             <span>공지 제작 워크스페이스</span>
@@ -937,12 +1196,13 @@ function App() {
                     <div className="draft-actions">
                       <button className="secondary-button" type="button" onClick={handleSave} disabled={isSaving}>
                         <Save size={18} />
-                        {user ? (isSaving ? "저장 중" : "Firestore 저장") : "로그인 후 저장"}
+                        {user ? (isSaving ? "저장 중" : "공지 저장") : "로그인 후 저장"}
                       </button>
                       <button
                         className="icon-button"
                         type="button"
                         onClick={handleCopy}
+                        disabled={!copyReviewConfirmed}
                         aria-label={`${channelLabels[activeChannel]} 초안 복사`}
                       >
                         <Clipboard size={18} />
@@ -960,10 +1220,27 @@ function App() {
                     <span>
                       {saveMessage ||
                         (user
-                          ? "저장하면 Firestore의 저장된 공지 목록에 추가됩니다."
-                          : "비로그인 상태에서는 공지가 저장되지 않습니다. Google 로그인 후 계정별로 저장할 수 있습니다.")}
+                          ? "저장하면 저장된 공지 목록에 추가됩니다."
+                          : "비로그인 상태에서는 공지가 저장되지 않습니다. 로그인 후 계정별로 저장할 수 있습니다.")}
                     </span>
                   </div>
+                  <label className="review-check" htmlFor={`copy-review-${activeChannel}`}>
+                    <input
+                      id={`copy-review-${activeChannel}`}
+                      type="checkbox"
+                      checked={copyReviewConfirmed}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        setCopyReviewConfirmed(checked);
+                        persistSessionNow({ copyReviewConfirmed: checked });
+                        setCopyState(`${channelLabels[activeChannel]} 초안 복사`);
+                      }}
+                    />
+                    <span>
+                      <strong>복사 전 확인</strong>
+                      대상, 기간, 혜택, 신청 방법과 링크를 검토했고 현재 초안을 게시 담당자가 확인했습니다.
+                    </span>
+                  </label>
                   <div
                     className="draft-editor-panel"
                     role="tabpanel"
@@ -977,7 +1254,7 @@ function App() {
                       id={`draft-editor-${activeChannel}`}
                       className="draft-editor"
                       value={draftTexts[activeChannel]}
-                      onChange={(event) => handleDraftChange(event.target.value)}
+                      onInput={(event) => handleDraftChange(event.currentTarget.value)}
                       spellCheck
                     />
                     <p>수정한 내용이 복사할 초안에 바로 반영됩니다. 게시 전 원문 근거는 정보 검토 단계에서 확인해 주세요.</p>
@@ -1074,7 +1351,7 @@ function App() {
 
           {!user ? (
             <div className="empty-state compact">
-              <p>Google 로그인하면 생성한 공지 초안을 사용자별로 저장할 수 있습니다.</p>
+              <p>로그인하면 생성한 공지 초안을 사용자별로 저장할 수 있습니다.</p>
             </div>
           ) : savedNotices.length ? (
             <div className="history-list">
