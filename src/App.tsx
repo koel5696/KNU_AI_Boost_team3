@@ -78,6 +78,7 @@ type Channel = "homepage" | "sns" | "message";
 type UploadStatus = "queued" | "processing" | "done" | "error";
 type WorkflowStep = 1 | 2 | 3 | 4 | 5;
 type ChannelDraftTexts = Record<Channel, string>;
+type MessageDraftView = "text" | "chat";
 type GeneratedPromotionImage = {
   mimeType: string;
   imageData: string;
@@ -251,6 +252,7 @@ function App() {
   const [copyState, setCopyState] = useState("홈페이지 초안 복사");
   const [draftTexts, setDraftTexts] = useState<ChannelDraftTexts | null>(restoredSession?.draftTexts ?? null);
   const [activeChannel, setActiveChannel] = useState<Channel>(restoredSession?.activeChannel ?? "homepage");
+  const [messageDraftView, setMessageDraftView] = useState<MessageDraftView>("text");
   const [imageStatus, setImageStatus] = useState("");
   const [shouldGenerateImage, setShouldGenerateImage] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<GeneratedPromotionImage | null>(null);
@@ -1538,6 +1540,28 @@ function App() {
                       <span>{draftTexts[activeChannel].length}자 · 바로 수정 가능</span>
                     </label>
                     {activeChannel === "message" && (
+                      <div className="message-view-tabs" role="tablist" aria-label="메시지 초안 보기 방식">
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={messageDraftView === "text"}
+                          className={messageDraftView === "text" ? "is-active" : ""}
+                          onClick={() => setMessageDraftView("text")}
+                        >
+                          텍스트 박스 형식
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={messageDraftView === "chat"}
+                          className={messageDraftView === "chat" ? "is-active" : ""}
+                          onClick={() => setMessageDraftView("chat")}
+                        >
+                          문자 형식
+                        </button>
+                      </div>
+                    )}
+                    {activeChannel === "message" && messageDraftView === "chat" && (
                       <section className="message-preview" aria-label="메시지 전송 화면 미리보기">
                         <div className="message-preview-header" aria-hidden="true">
                           <ArrowLeft className="message-back" size={18} />
@@ -1562,7 +1586,7 @@ function App() {
                         </div>
                       </section>
                     )}
-                    {activeChannel !== "message" && (
+                    {(activeChannel !== "message" || messageDraftView === "text") && (
                       <textarea
                         id={`draft-editor-${activeChannel}`}
                         className="draft-editor"

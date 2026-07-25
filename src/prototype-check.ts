@@ -12,6 +12,7 @@ const messageWithSender = buildMessageDraft(normal, "학생지원팀");
 
 assert(!post.body.startsWith("안녕하세요"), "홈페이지 초안에는 첫 인사말이 들어가면 안 됩니다.");
 assert(messageWithSender.copyText.includes("\n\n안녕하세요. 학생지원팀입니다.\n\n개요:"), "문자 초안에는 제목 뒤에 발신 소속 인사가 반영되어야 합니다.");
+assert(!messageWithSender.copyText.split("\n")[0].includes("학생지원팀"), "문자 제목에는 발신 소속이 섞이면 안 됩니다.");
 assert(!messageWithSender.copyText.startsWith("안녕하세요."), "문자 초안은 제목 블록보다 인사가 먼저 나오면 안 됩니다.");
 assert(!messageWithSender.copyText.includes("※ 자세한 내용은 학교 홈페이지 공지를 확인해 주세요."), "문자 초안에는 홈페이지 확인 안내 문구가 들어가면 안 됩니다.");
 

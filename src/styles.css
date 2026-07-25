@@ -2606,9 +2606,44 @@ ul {
   border-color: var(--blue);
 }
 
+.message-view-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  border: 1px solid #d5e2ef;
+  border-radius: 6px;
+  padding: 4px;
+  background: #f6f9fc;
+}
+
+.message-view-tabs button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 4px;
+  padding: 0 12px;
+  background: transparent;
+  color: #52657a;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.message-view-tabs button.is-active {
+  background: #ffffff;
+  color: #173d63;
+  box-shadow: 0 2px 8px rgba(22, 48, 77, 0.12);
+}
+
 @media (max-width: 680px) {
   .sender-name-field {
     grid-template-columns: 1fr;
+  }
+
+  .message-view-tabs {
+    width: 100%;
+  }
+
+  .message-view-tabs button {
+    flex: 1;
   }
 }
 

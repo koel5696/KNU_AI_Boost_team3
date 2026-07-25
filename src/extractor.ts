@@ -516,7 +516,7 @@ export function buildMessageDraft(info: ExtractedInfo, senderName = ""): Message
   const contact = info.contact || NEEDS_REVIEW;
   const mergedApplyContact = sameNoticeValue(applyMethod, contact);
 
-  const body = `[${organizer ? `${organizer} | ` : ""}${subject} 안내]
+  const body = `[${subject} 안내]
 
 ${messageGreeting(organizer)}
 
