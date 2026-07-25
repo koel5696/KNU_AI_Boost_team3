@@ -525,5 +525,5 @@ ${messageGreeting(organizer)}
 기간: ${period}
 ${mergedApplyContact ? `신청 및 문의: ${applyMethod}` : `신청: ${applyMethod}\n문의: ${contact}`}`;
 
-  return { title, body, copyText: body };
+  return { title: subject, body, copyText: body };
 }
