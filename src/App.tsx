@@ -101,6 +101,7 @@ const SESSION_DRAFT_KEY = "knu-notice-ai-session-draft";
 
 type SessionDraftState = {
   mailText: string;
+  senderName: string;
   analysis: AnalysisResult | null;
   loadedResult: ExtractedInfo | null;
   draftTexts: ChannelDraftTexts | null;
@@ -145,6 +146,7 @@ function loadSessionDraft(): SessionDraftState | null {
 
     return {
       mailText: typeof parsed.mailText === "string" ? parsed.mailText : sampleMail,
+      senderName: typeof parsed.senderName === "string" ? parsed.senderName : "",
       analysis: parsed.analysis ?? null,
       loadedResult: parsed.loadedResult ?? null,
       draftTexts: isDraftTexts(parsed.draftTexts) ? parsed.draftTexts : null,
@@ -248,6 +250,7 @@ function App() {
   const restoredSession = restoredSessionRef.current;
 
   const [mailText, setMailText] = useState(restoredSession?.mailText ?? sampleMail);
+  const [senderName, setSenderName] = useState(restoredSession?.senderName ?? "");
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(restoredSession?.analysis ?? null);
   const [loadedResult, setLoadedResult] = useState<ExtractedInfo | null>(restoredSession?.loadedResult ?? null);
@@ -288,6 +291,7 @@ function App() {
   const persistSessionNow = (overrides: Partial<SessionDraftState>) => {
     saveSessionDraft({
       mailText,
+      senderName,
       analysis,
       loadedResult,
       draftTexts,
@@ -361,7 +365,7 @@ function App() {
   const channelDrafts = useMemo(() => {
     if (!result || !post) return null;
     const sns = buildSnsPost(result);
-    const message = buildMessageDraft(result);
+    const message = buildMessageDraft(result, senderName);
     return {
       homepage: post.copyText,
       sns: sns.copyText,
@@ -369,7 +373,18 @@ function App() {
       snsPost: sns,
       messageDraft: message,
     };
-  }, [post, result]);
+  }, [post, result, senderName]);
+
+  useEffect(() => {
+    if (!result) return;
+    setDraftTexts((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        message: buildMessageDraft(result, senderName).copyText,
+      };
+    });
+  }, [result, senderName]);
 
   useEffect(() => {
     if (!channelDrafts) {
@@ -388,6 +403,7 @@ function App() {
   useEffect(() => {
     sessionSnapshotRef.current = {
       mailText,
+      senderName,
       analysis,
       loadedResult,
       draftTexts,
@@ -398,6 +414,7 @@ function App() {
 
     const hasSessionWork =
       mailText !== sampleMail ||
+      senderName.trim() !== "" ||
       Boolean(analysis) ||
       Boolean(loadedResult) ||
       Boolean(draftTexts) ||
@@ -412,6 +429,7 @@ function App() {
 
     saveSessionDraft({
       mailText,
+      senderName,
       analysis,
       loadedResult,
       draftTexts,
@@ -419,7 +437,7 @@ function App() {
       currentStep,
       copyReviewConfirmed,
     });
-  }, [activeChannel, analysis, copyReviewConfirmed, currentStep, draftTexts, loadedResult, mailText]);
+  }, [activeChannel, analysis, copyReviewConfirmed, currentStep, draftTexts, loadedResult, mailText, senderName]);
 
   useEffect(() => {
     const flushVisibleDraft = () => {
@@ -653,7 +671,7 @@ function App() {
 
       const nextPost = buildHomepagePost(nextAnalysis.info);
       const nextSns = buildSnsPost(nextAnalysis.info);
-      const nextMessage = buildMessageDraft(nextAnalysis.info);
+      const nextMessage = buildMessageDraft(nextAnalysis.info, senderName);
       const nextDraftTexts = {
         homepage: nextPost.copyText,
         sns: nextSns.copyText,
@@ -682,6 +700,7 @@ function App() {
   const handleReset = () => {
     clearSessionDraft();
     setMailText("");
+    setSenderName("");
     uploads.forEach((upload) => {
       if (upload.previewUrl) URL.revokeObjectURL(upload.previewUrl);
     });
@@ -857,7 +876,7 @@ function App() {
     setDraftTexts({
       homepage: notice.post.copyText,
       sns: buildSnsPost(notice.extractedInfo).copyText,
-      message: buildMessageDraft(notice.extractedInfo).copyText,
+      message: buildMessageDraft(notice.extractedInfo, senderName).copyText,
     });
     setActiveChannel("homepage");
     setCopyReviewConfirmed(false);
@@ -1229,7 +1248,7 @@ function App() {
         {currentStep === 1 && <div className="primary-actions step-actions">
           <button className="primary-button" type="button" onClick={handleGenerate} disabled={isProcessing || isAnalyzing}>
             {isProcessing || isAnalyzing ? <LoaderCircle className="spin" size={18} /> : <FileText size={18} />}
-            {isProcessing ? "파일 처리 중" : isAnalyzing ? "AI 분석 중" : "내용 정리하고 다음"}
+            {isProcessing ? "파일 처리 중" : isAnalyzing ? "AI 분석 중" : "내용 분석하기"}
             {!isProcessing && !isAnalyzing && <ArrowRight size={18} />}
           </button>
           <button className="secondary-button" type="button" onClick={handleReset}>
@@ -1381,6 +1400,25 @@ function App() {
                     <ChannelTab channel="sns" activeChannel={activeChannel} icon={<Hash size={18} />} onSelect={handleChannelSelect} />
                     <ChannelTab channel="message" activeChannel={activeChannel} icon={<MessageCircle size={18} />} onSelect={handleChannelSelect} />
                   </div>
+                  <label className="sender-name-field" htmlFor="sender-name">
+                    <span>
+                      <strong>문자 발신 소속</strong>
+                      <small>메시지 초안 첫 문장에만 반영됩니다.</small>
+                    </span>
+                    <input
+                      id="sender-name"
+                      type="text"
+                      value={senderName}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setSenderName(value);
+                        persistSessionNow({ senderName: value, copyReviewConfirmed: false });
+                        setCopyReviewConfirmed(false);
+                        setCopyState(`${channelLabels[activeChannel]} 초안 복사`);
+                      }}
+                      placeholder="예: 학생지원팀, 대학일자리플러스센터"
+                    />
+                  </label>
                   <div className={user ? "save-feedback is-signed-in" : "save-feedback is-guest"} role="status">
                     <Save size={16} />
                     <span>

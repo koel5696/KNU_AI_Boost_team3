@@ -2519,6 +2519,56 @@ ul {
   box-shadow: 0 2px 7px rgba(22, 47, 82, 0.1);
 }
 
+.sender-name-field {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(0, 1.3fr);
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+  border: 1px solid #d9e6f2;
+  border-radius: 6px;
+  padding: 12px;
+  background: #fbfdff;
+}
+
+.sender-name-field span {
+  display: grid;
+  gap: 3px;
+}
+
+.sender-name-field strong {
+  color: #173d63;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.sender-name-field small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sender-name-field input {
+  width: 100%;
+  border: 1px solid #cfddea;
+  border-radius: 4px;
+  padding: 10px 11px;
+  color: var(--text);
+  font: inherit;
+  font-weight: 800;
+}
+
+.sender-name-field input:focus {
+  outline: 2px solid rgba(0, 122, 204, 0.18);
+  border-color: var(--blue);
+}
+
+@media (max-width: 680px) {
+  .sender-name-field {
+    grid-template-columns: 1fr;
+  }
+}
+
 .sns-preview,
 .message-preview {
   overflow: hidden;

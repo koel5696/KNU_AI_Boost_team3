@@ -421,9 +421,7 @@ export function buildHomepagePost(info: ExtractedInfo): HomepagePost {
     ? `5. 신청 방법 및 문의\n${applyMethod}`
     : `5. 신청 방법\n${applyMethod}\n\n6. 문의\n${contact}`;
 
-  const body = `안녕하세요.
-
-다음과 같이 ${category} 프로그램을 안내하오니 관심 있는 분들의 많은 참여 바랍니다.
+  const body = `다음과 같이 ${category} 프로그램을 안내하오니 관심 있는 분들의 많은 참여 바랍니다.
 
 1. 프로그램 개요
 ${description}
@@ -489,7 +487,12 @@ ${mergedApplyContact ? `✅ 신청 및 문의: ${applyMethod}` : `✅ 신청: ${
   };
 }
 
-export function buildMessageDraft(info: ExtractedInfo): MessageDraft {
+function messageGreeting(senderName = "") {
+  const trimmed = senderName.replace(/\s+/g, " ").trim();
+  return trimmed ? `안녕하세요. ${trimmed}입니다.` : "안녕하세요.";
+}
+
+export function buildMessageDraft(info: ExtractedInfo, senderName = ""): MessageDraft {
   const category = info.category || "프로그램";
   const title = noticeTitle(info);
   const description = info.description ? sentenceForNotice(info.description) : NEEDS_REVIEW;
@@ -502,11 +505,12 @@ export function buildMessageDraft(info: ExtractedInfo): MessageDraft {
   const body = `[강남대학교 ${category} 안내]
 ${title}
 
+${messageGreeting(senderName)}
+
 개요: ${description}
 대상: ${audience}
 기간: ${period}
-${mergedApplyContact ? `신청 및 문의: ${applyMethod}` : `신청: ${applyMethod}\n문의: ${contact}`}
-※ 자세한 내용은 학교 홈페이지 공지를 확인해 주세요.`;
+${mergedApplyContact ? `신청 및 문의: ${applyMethod}` : `신청: ${applyMethod}\n문의: ${contact}`}`;
 
   return { title, body, copyText: body };
 }
