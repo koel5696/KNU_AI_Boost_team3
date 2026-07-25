@@ -26,10 +26,12 @@ import {
   Mail,
   MessageCircle,
   Monitor,
+  MoreVertical,
   Paperclip,
   QrCode,
   RefreshCcw,
   Save,
+  Send,
   Sparkles,
   Trash2,
   Upload,
@@ -1535,13 +1537,40 @@ function App() {
                       <strong>초안 내용</strong>
                       <span>{draftTexts[activeChannel].length}자 · 바로 수정 가능</span>
                     </label>
-                    <textarea
-                      id={`draft-editor-${activeChannel}`}
-                      className="draft-editor"
-                      value={draftTexts[activeChannel]}
-                      onInput={(event) => handleDraftChange(event.currentTarget.value)}
-                      spellCheck
-                    />
+                    {activeChannel === "message" && (
+                      <section className="message-preview" aria-label="메시지 전송 화면 미리보기">
+                        <div className="message-preview-header" aria-hidden="true">
+                          <ArrowLeft className="message-back" size={18} />
+                          <strong>강남대학교 공지</strong>
+                          <MoreVertical className="message-menu" size={18} />
+                        </div>
+                        <div className="message-meta">
+                          <strong>강남대학교</strong>
+                          <span>오후 3:00</span>
+                        </div>
+                        <textarea
+                          id="draft-editor-message"
+                          className="message-bubble message-bubble-editor"
+                          value={draftTexts.message}
+                          onInput={(event) => handleDraftChange(event.currentTarget.value)}
+                          aria-label="메시지 초안 내용"
+                          spellCheck
+                        />
+                        <div className="message-composer" aria-hidden="true">
+                          <span>메시지 입력</span>
+                          <b><Send size={15} /></b>
+                        </div>
+                      </section>
+                    )}
+                    {activeChannel !== "message" && (
+                      <textarea
+                        id={`draft-editor-${activeChannel}`}
+                        className="draft-editor"
+                        value={draftTexts[activeChannel]}
+                        onInput={(event) => handleDraftChange(event.currentTarget.value)}
+                        spellCheck
+                      />
+                    )}
                     <p>수정한 내용이 복사할 초안에 바로 반영됩니다. 게시 전 원문 근거는 정보 검토 단계에서 확인해 주세요.</p>
                   </div>
                   </>}

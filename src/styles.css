@@ -2615,58 +2615,36 @@ ul {
 .sns-preview,
 .message-preview {
   overflow: hidden;
-  border: 1px solid #cfddea;
-  border-radius: 8px;
-  background: #fff;
+  padding: 0;
+  background: #eaf1f8;
+  box-shadow: inset 0 0 0 1px rgba(41, 64, 86, 0.04);
 }
 
-.sns-profile {
-  display: flex;
-  gap: 10px;
+.message-preview-header {
+  display: grid;
+  grid-template-columns: 28px 1fr 28px;
   align-items: center;
-  padding: 14px 16px 4px;
+  min-height: 48px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: #22344a;
+  box-shadow: 0 1px 0 rgba(41, 64, 86, 0.1);
+  text-align: center;
 }
 
-.sns-profile > span:last-child {
-  display: grid;
+.message-preview-header strong {
+  font-size: 14px;
 }
 
-.sns-profile small {
-  color: var(--muted);
-}
-
-.sns-avatar {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--deep-blue);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.sns-preview pre {
-  border: 0;
-  background: #fff;
-}
-
-.hashtags {
-  margin: -8px 16px 16px;
-  color: var(--blue);
-  line-height: 1.55;
-}
-
-.message-preview {
-  padding: 16px;
-  background: #f4f8fc;
+.message-back,
+.message-menu {
+  color: #52657a;
 }
 
 .message-meta {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin: 16px 16px 12px;
   color: #40536a;
   font-size: 13px;
 }
@@ -2677,7 +2655,7 @@ ul {
 
 .message-bubble {
   width: min(92%, 420px);
-  margin-left: auto;
+  margin: 0 16px 16px auto;
   border-radius: 16px 16px 4px 16px;
   padding: 15px 16px;
   background: #ffdf4f;
@@ -2685,6 +2663,51 @@ ul {
   white-space: pre-wrap;
   line-height: 1.58;
   box-shadow: 0 4px 12px rgba(64, 55, 12, 0.1);
+}
+
+.message-bubble-editor {
+  display: block;
+  min-height: 180px;
+  border: 0;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 14px;
+  resize: vertical;
+}
+
+.message-bubble-editor:focus {
+  outline: 3px solid rgba(196, 152, 0, 0.35);
+  outline-offset: 2px;
+}
+
+.message-composer {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 58px;
+  padding: 10px 14px;
+  background: #ffffff;
+  box-shadow: 0 -1px 0 rgba(41, 64, 86, 0.1);
+}
+
+.message-composer span {
+  flex: 1;
+  border: 1px solid #d5e0eb;
+  border-radius: 999px;
+  padding: 9px 13px;
+  color: #8392a2;
+  font-size: 13px;
+}
+
+.message-composer b {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 50%;
+  background: #506f91;
+  color: #ffffff;
+  font-size: 15px;
 }
 
 .draft-note {
