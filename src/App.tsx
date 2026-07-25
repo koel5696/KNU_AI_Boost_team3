@@ -60,23 +60,26 @@ import {
   type ExtractedKey,
 } from "./sourceAnalysis";
 import {
-  buildImageDraft,
-  downloadImageDraft,
-  type ImageDraft,
-} from "./imageDraft";
-import {
   deleteNoticeDraft,
   loadNoticeDrafts,
   saveNoticeDraft,
   type SavedNotice,
 } from "./noticeHistory";
-import { analyzeNoticeWithAi } from "./aiNoticeApi";
-import type { AiNoticeResponse } from "./aiNoticeApi";
+import {
+  analyzeNoticeWithAi,
+  generatePromotionImageWithAi,
+  loadPromotionImageQuota,
+} from "./aiNoticeApi";
+import type { AiNoticeResponse, ImageQuotaResponse } from "./aiNoticeApi";
 
 type Channel = "homepage" | "sns" | "message";
 type UploadStatus = "queued" | "processing" | "done" | "error";
 type WorkflowStep = 1 | 2 | 3 | 4 | 5;
 type ChannelDraftTexts = Record<Channel, string>;
+type GeneratedPromotionImage = {
+  mimeType: string;
+  imageData: string;
+};
 
 type UploadItem = {
   id: string;
@@ -259,6 +262,10 @@ function App() {
   const [draftTexts, setDraftTexts] = useState<ChannelDraftTexts | null>(restoredSession?.draftTexts ?? null);
   const [activeChannel, setActiveChannel] = useState<Channel>(restoredSession?.activeChannel ?? "homepage");
   const [imageStatus, setImageStatus] = useState("");
+  const [shouldGenerateImage, setShouldGenerateImage] = useState(false);
+  const [generatedImage, setGeneratedImage] = useState<GeneratedPromotionImage | null>(null);
+  const [imageQuota, setImageQuota] = useState<ImageQuotaResponse | null>(null);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -277,6 +284,7 @@ function App() {
 
   const moveToStep = (step: WorkflowStep) => {
     if ((step === 2 || step === 3 || step === 4) && !result) return;
+    if (step === 4 && !generatedImage) return;
     setCurrentStep(step);
   };
 
@@ -316,8 +324,20 @@ function App() {
 
       if (!currentUser) {
         setSavedNotices([]);
+        setShouldGenerateImage(false);
+        setImageQuota(null);
         setSaveMessage("비로그인 상태입니다. 분석과 복사는 가능하지만 저장은 로그인 후 사용할 수 있습니다.");
         return;
+      }
+
+      try {
+        const idToken = await currentUser.getIdToken();
+        const quota = await loadPromotionImageQuota(idToken);
+        setImageQuota(quota);
+        if (quota.remaining <= 0) setShouldGenerateImage(false);
+      } catch {
+        setImageQuota(null);
+        setShouldGenerateImage(false);
       }
 
       try {
@@ -357,11 +377,12 @@ function App() {
       }
     : null);
   const post = useMemo(() => (result ? buildHomepagePost(result) : null), [result]);
-  const imageDraft = useMemo(
-    () => (result ? buildImageDraft(result, channelLabels[activeChannel]) : null),
-    [activeChannel, result],
-  );
-
+  const generatedImageUrl = generatedImage
+    ? `data:${generatedImage.mimeType};base64,${generatedImage.imageData}`
+    : "";
+  const imageQuotaLimit = imageQuota?.limit ?? 3;
+  const imageQuotaRemaining = imageQuota?.remaining ?? 0;
+  const canRequestImage = Boolean(user && imageQuota && imageQuotaRemaining > 0);
   const channelDrafts = useMemo(() => {
     if (!result || !post) return null;
     const sns = buildSnsPost(result);
@@ -635,6 +656,7 @@ function App() {
     setCopyReviewConfirmed(false);
     setCopyState("홈페이지 초안 복사");
     setImageStatus("");
+    setGeneratedImage(null);
     setError("");
     setHistoryMessage("");
     setSaveMessage(user ? "분석 결과가 갱신되었습니다. 검토 후 저장하면 저장된 공지 목록에 추가됩니다." : "분석 결과가 갱신되었습니다. 비로그인 상태에서는 복사와 이미지 저장만 가능하고, 공지 저장은 로그인 후 가능합니다.");
@@ -667,6 +689,39 @@ function App() {
         setSaveMessage(user
           ? "AI 분석 서버 응답을 받지 못해 기본 분석 결과로 정리했습니다. 검토 후 저장할 수 있습니다."
           : "AI 분석 서버 응답을 받지 못해 기본 분석 결과로 정리했습니다. 저장과 이미지 제작은 로그인 후 사용할 수 있습니다.");
+      }
+
+      if (shouldGenerateImage && user && canRequestImage) {
+        setIsGeneratingImage(true);
+        setImageStatus("AI가 홍보 이미지를 만들고 있습니다.");
+        try {
+          const idToken = await user.getIdToken();
+          const imageResult = await generatePromotionImageWithAi(mailText, allSources, aiFiles, idToken);
+          setGeneratedImage({
+            mimeType: imageResult.mimeType,
+            imageData: imageResult.imageData,
+          });
+          setImageQuota({
+            used: imageResult.used,
+            limit: imageResult.limit,
+            remaining: imageResult.remaining,
+            date: imageResult.date,
+          });
+          setImageStatus("홍보 이미지가 생성되었습니다.");
+        } catch {
+          setGeneratedImage(null);
+          setImageStatus("이미지 생성에 실패했습니다. 공지 초안은 계속 사용할 수 있습니다.");
+          try {
+            const idToken = await user.getIdToken();
+            setImageQuota(await loadPromotionImageQuota(idToken));
+          } catch {
+            setImageQuota(null);
+          }
+        } finally {
+          setIsGeneratingImage(false);
+        }
+      } else if (shouldGenerateImage) {
+        setImageStatus(user ? "이미지 생성 가능 횟수를 확인하지 못했거나 오늘 한도를 모두 사용해 이미지 생성을 보류했습니다." : "로그인 후 이미지 생성을 사용할 수 있습니다.");
       }
 
       const nextPost = buildHomepagePost(nextAnalysis.info);
@@ -715,6 +770,7 @@ function App() {
     setCopyReviewConfirmed(false);
     setCopyState("홈페이지 초안 복사");
     setImageStatus("");
+    setGeneratedImage(null);
     setCurrentStep(1);
   };
 
@@ -727,6 +783,7 @@ function App() {
     });
     setAnalysis(null);
     setLoadedResult(null);
+    setGeneratedImage(null);
     setCopyReviewConfirmed(false);
   };
 
@@ -763,14 +820,17 @@ function App() {
   };
 
   const handleImageDownload = async () => {
-    if (!imageDraft) return;
-    if (!user) {
-      setImageStatus("이미지 제작은 로그인 후 사용할 수 있습니다.");
+    if (!generatedImage || !generatedImageUrl) {
+      setImageStatus("생성된 이미지가 없습니다.");
       return;
     }
-    setImageStatus("이미지 만드는 중...");
     try {
-      const fileName = await downloadImageDraft(imageDraft);
+      const extension = generatedImage.mimeType.includes("jpeg") ? "jpg" : "png";
+      const fileName = `notice-mate-promotion-${Date.now()}.${extension}`;
+      const link = document.createElement("a");
+      link.href = generatedImageUrl;
+      link.download = fileName;
+      link.click();
       setImageStatus(`${fileName} 저장 완료`);
     } catch {
       setImageStatus("이미지 저장에 실패했습니다.");
@@ -778,8 +838,8 @@ function App() {
   };
 
   const handleOpenImageStep = () => {
-    if (!user) {
-      setSaveMessage("이미지 제작은 로그인 후 사용할 수 있습니다.");
+    if (!generatedImage) {
+      setSaveMessage("분석 시작 전에 이미지 생성을 선택한 경우에만 이미지 단계가 열립니다.");
       return;
     }
     moveToStep(4);
@@ -1120,7 +1180,7 @@ function App() {
               <button
                 type="button"
                 onClick={() => moveToStep(item.step)}
-                disabled={(item.step === 2 || item.step === 3 || item.step === 4) && !result}
+                disabled={(item.step === 2 || item.step === 3) ? !result : item.step === 4 ? !generatedImage : false}
                 aria-current={currentStep === item.step ? "step" : undefined}
               >
                 <span>{currentStep > item.step ? <CheckCircle2 size={17} /> : item.step}</span>
@@ -1138,7 +1198,7 @@ function App() {
           </div>
           <div className="workspace-step-status">
             <span>{uploads.length ? `파일 ${uploads.length}개 추가됨` : "파일 추가 전"}</span>
-            <strong>{isProcessing ? "첨부파일 처리 중" : isAnalyzing ? "AI 분석 중" : "입력 준비"}</strong>
+            <strong>{isProcessing ? "첨부파일 처리 중" : isGeneratingImage ? "이미지 생성 중" : isAnalyzing ? "AI 분석 중" : "입력 준비"}</strong>
           </div>
         </section>}
 
@@ -1159,6 +1219,7 @@ function App() {
                 setMailText(event.target.value);
                 setAnalysis(null);
                 setLoadedResult(null);
+                setGeneratedImage(null);
               }}
               placeholder="외부 공고 또는 공유 메일 내용을 붙여넣어 주세요. 클립보드의 이미지도 붙여넣을 수 있습니다."
               aria-label="공유 메일 본문 입력"
@@ -1217,22 +1278,45 @@ function App() {
           </div>
         </section>}
 
-        {currentStep === 1 && isAnalyzing && (
+        {currentStep === 1 && <section className="image-option-panel" aria-label="AI 홍보 이미지 생성 옵션">
+          <label className={!user || imageQuotaRemaining <= 0 ? "image-option is-disabled" : "image-option"}>
+            <input
+              type="checkbox"
+              checked={shouldGenerateImage}
+              disabled={!canRequestImage || isAnalyzing || isProcessing}
+              onChange={(event) => setShouldGenerateImage(event.target.checked)}
+            />
+            <span>
+              <strong>AI 홍보 이미지도 함께 만들기</strong>
+              <small>
+                {user
+                  ? imageQuota
+                    ? `오늘 남은 생성 횟수 ${imageQuotaRemaining}/${imageQuotaLimit}`
+                    : "생성 가능 여부를 확인하지 못했습니다."
+                  : "로그인 후 사용할 수 있습니다."}
+              </small>
+            </span>
+          </label>
+        </section>}
+
+        {currentStep === 1 && (isAnalyzing || isGeneratingImage) && (
           <section className="ai-waiting-card" aria-label="AI 분석 대기 상태" role="status">
             <div className="ai-orbit" aria-hidden="true">
               <span />
               <Sparkles size={24} />
             </div>
             <div className="ai-waiting-copy">
-              <p className="panel-kicker">AI 분석 중</p>
-              <h2>메일과 첨부파일을 함께 읽고 있어요</h2>
+              <p className="panel-kicker">{isGeneratingImage ? "AI 이미지 생성 중" : "AI 분석 중"}</p>
+              <h2>{isGeneratingImage ? "홍보 이미지를 만들고 있어요" : "메일과 첨부파일을 함께 읽고 있어요"}</h2>
               <p>
-                핵심 정보, 기간, 신청 방법, 문의처를 비교하면서 공지 초안에 들어갈 내용을 정리하는 중입니다.
+                {isGeneratingImage
+                  ? "메일 내용과 첨부파일의 주제, 톤, 핵심 정보를 바탕으로 게시용 이미지를 구성하는 중입니다."
+                  : "핵심 정보, 기간, 신청 방법, 문의처를 비교하면서 공지 초안에 들어갈 내용을 정리하는 중입니다."}
               </p>
               <div className="ai-waiting-steps" aria-label="분석 진행 단계">
                 <span className="is-active">자료 확인</span>
                 <span>정보 추출</span>
-                <span>초안 준비</span>
+                <span>{isGeneratingImage ? "이미지 생성" : "초안 준비"}</span>
               </div>
             </div>
           </section>
@@ -1246,10 +1330,10 @@ function App() {
         )}
 
         {currentStep === 1 && <div className="primary-actions step-actions">
-          <button className="primary-button" type="button" onClick={handleGenerate} disabled={isProcessing || isAnalyzing}>
-            {isProcessing || isAnalyzing ? <LoaderCircle className="spin" size={18} /> : <FileText size={18} />}
-            {isProcessing ? "파일 처리 중" : isAnalyzing ? "AI 분석 중" : "내용 분석하기"}
-            {!isProcessing && !isAnalyzing && <ArrowRight size={18} />}
+          <button className="primary-button" type="button" onClick={handleGenerate} disabled={isProcessing || isAnalyzing || isGeneratingImage}>
+            {isProcessing || isAnalyzing || isGeneratingImage ? <LoaderCircle className="spin" size={18} /> : <FileText size={18} />}
+            {isProcessing ? "파일 처리 중" : isGeneratingImage ? "이미지 생성 중" : isAnalyzing ? "AI 분석 중" : "내용 분석하기"}
+            {!isProcessing && !isAnalyzing && !isGeneratingImage && <ArrowRight size={18} />}
           </button>
           <button className="secondary-button" type="button" onClick={handleReset}>
             <RefreshCcw size={18} />
@@ -1279,6 +1363,13 @@ function App() {
               {currentStep === 2 ? "검토 필요" : currentStep === 3 ? "게시 준비" : "이미지 준비"}
             </span>
           </div>
+
+          {imageStatus && currentStep !== 4 && (
+            <div className={generatedImage ? "image-status-note is-ready" : "image-status-note"} role="status">
+              <ImageIcon size={17} />
+              <span>{imageStatus}</span>
+            </div>
+          )}
 
           {result ? (
             <>
@@ -1464,29 +1555,30 @@ function App() {
                     <p>수정한 내용이 복사할 초안에 바로 반영됩니다. 게시 전 원문 근거는 정보 검토 단계에서 확인해 주세요.</p>
                   </div>
                   </>}
-                  {currentStep === 4 && imageDraft && (
+                  {currentStep === 4 && generatedImage && (
                     <div className="image-maker">
                       <div className="image-maker-heading">
                         <div>
                           <p className="panel-kicker">이미지 제작</p>
-                          <h3>초안을 홍보 이미지로 만들기</h3>
+                          <h3>AI가 만든 홍보 이미지</h3>
                         </div>
                         <button
                           className="image-download-button"
                           type="button"
                           onClick={handleImageDownload}
-                          disabled={!user}
+                          disabled={!generatedImage}
                         >
                           <Download size={18} />
-                          {user ? "PNG 이미지 저장" : "로그인 후 저장"}
+                          이미지 저장
                         </button>
                       </div>
                       <div className="image-workspace">
-                        <ImageDraftPreview draft={imageDraft} />
+                        <img className="generated-promotion-image" src={generatedImageUrl} alt="AI가 생성한 공지 홍보 이미지" />
                         <div className="image-guide">
-                          <strong>1080 x 1350 PNG</strong>
-                          <span>모집·혜택과 필수 안내 정보를 한 장에 담은 홍보용 4:5 이미지입니다.</span>
-                          <span>이미지 저장 전 추출 정보와 편집한 문구를 한 번 더 확인해 주세요.</span>
+                          <strong>AI 생성 이미지</strong>
+                          <span>메일 본문과 첨부파일을 바탕으로 생성된 홍보 이미지입니다.</span>
+                          <span>게시 전 날짜, 링크, 연락처처럼 중요한 문구는 원문과 한 번 더 대조해 주세요.</span>
+                          {imageQuota && <span>오늘 남은 생성 횟수 {imageQuota.remaining}/{imageQuota.limit}</span>}
                           {imageStatus && <em role="status">{imageStatus}</em>}
                         </div>
                       </div>
@@ -1519,8 +1611,8 @@ function App() {
                 <ArrowLeft size={18} />
                 검토로 돌아가기
               </button>
-              <button className="primary-button" type="button" onClick={handleOpenImageStep}>
-                {user ? "이미지 제작하기" : "로그인 후 이미지 제작"}
+              <button className="primary-button" type="button" onClick={handleOpenImageStep} disabled={!generatedImage}>
+                {generatedImage ? "이미지 확인하기" : "이미지 없음"}
                 <ArrowRight size={18} />
               </button>
             </div>
@@ -1794,30 +1886,6 @@ function ChannelTab({
     <button className={isActive ? "channel-tab is-active" : "channel-tab"} type="button" role="tab" aria-selected={isActive} onClick={() => onSelect(channel)}>
       {icon}<span>{channelLabels[channel]}</span>
     </button>
-  );
-}
-
-function ImageDraftPreview({ draft }: { draft: ImageDraft }) {
-  return (
-    <div className="visual-card is-promotional" aria-label="홍보용 이미지 미리보기">
-      <div className="visual-card-brand">
-        <strong>KNU</strong>
-        <span>KANGNAM UNIVERSITY</span>
-        <small>{draft.channelLabel} IMAGE</small>
-      </div>
-      <p className="visual-card-kicker">{draft.category}</p>
-      <h4>{draft.title}</h4>
-      <p className="visual-card-audience">대상 · {draft.audience}</p>
-      <div className="visual-card-highlight">
-        <span>주요 혜택</span>
-        <strong>{draft.benefit}</strong>
-      </div>
-      <dl>
-        <div><dt>기간</dt><dd>{draft.period}</dd></div>
-        <div><dt>신청</dt><dd>{draft.applyMethod}</dd></div>
-      </dl>
-      <footer>문의 · {draft.contact}</footer>
-    </div>
   );
 }
 

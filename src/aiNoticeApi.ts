@@ -9,9 +9,23 @@ export type AiNoticeResponse = {
   warnings?: string[];
 };
 
+export type ImageQuotaResponse = {
+  used: number;
+  limit: number;
+  remaining: number;
+  date: string;
+};
+
+export type PromotionImageResponse = ImageQuotaResponse & {
+  mimeType: string;
+  imageData: string;
+  warnings?: string[];
+};
+
 const DEFAULT_AI_API_URL = "https://notice-mate-server.o-r.kr";
 const AI_API_URL = String(import.meta.env.VITE_NOTICE_AI_API_URL || DEFAULT_AI_API_URL).replace(/\/+$/, "");
 const AI_TIMEOUT_MS = 60_000;
+const IMAGE_TIMEOUT_MS = 120_000;
 const DIRECT_ATTACHMENT_TYPES = new Set([
   "application/pdf",
   "image/png",
@@ -27,6 +41,18 @@ function compactSource(source: ProcessedSource) {
     text: source.text,
     links: source.links,
     qrCodes: source.qrCodes,
+  };
+}
+
+function normalizeQuota(payload: Partial<ImageQuotaResponse> | undefined): ImageQuotaResponse {
+  const limit = Number.isFinite(payload?.limit) ? Number(payload?.limit) : 3;
+  const used = Number.isFinite(payload?.used) ? Number(payload?.used) : 0;
+  const remaining = Number.isFinite(payload?.remaining) ? Number(payload?.remaining) : Math.max(0, limit - used);
+  return {
+    used,
+    limit,
+    remaining,
+    date: typeof payload?.date === "string" ? payload.date : "",
   };
 }
 
@@ -91,6 +117,63 @@ export async function analyzeNoticeWithAi(
       ...payload,
       info: normalizeInfo(payload.info),
       evidence: normalizeEvidence(payload.evidence),
+      warnings: payload.warnings ?? [],
+    };
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+export async function loadPromotionImageQuota(idToken: string): Promise<ImageQuotaResponse> {
+  const response = await fetch(`${AI_API_URL}/api/promotion-image/quota`, {
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Image quota failed with ${response.status}`);
+  }
+
+  return normalizeQuota((await response.json()) as ImageQuotaResponse);
+}
+
+export async function generatePromotionImageWithAi(
+  mailText: string,
+  sources: ProcessedSource[],
+  files: File[],
+  idToken: string,
+): Promise<PromotionImageResponse> {
+  const formData = new FormData();
+  formData.append("mailText", mailText);
+  formData.append("sources", JSON.stringify(sources.map(compactSource)));
+  files.filter(canSendOriginalToAi).forEach((file) => {
+    formData.append("files", file, file.name);
+  });
+
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), IMAGE_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${AI_API_URL}/api/promotion-image`, {
+      method: "POST",
+      body: formData,
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Image generation failed with ${response.status}`);
+    }
+
+    const payload = (await response.json()) as PromotionImageResponse;
+    return {
+      ...payload,
+      ...normalizeQuota(payload),
+      mimeType: payload.mimeType || "image/png",
+      imageData: payload.imageData || "",
       warnings: payload.warnings ?? [],
     };
   } finally {
