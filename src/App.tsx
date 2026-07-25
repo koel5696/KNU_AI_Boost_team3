@@ -719,6 +719,10 @@ function App() {
     if (!mailText.trim() && !allSources.some((source) => source.text.trim()) && !aiFiles.length) {
       setAnalysis(null);
       setLoadedResult(null);
+      setLoadedNoticeId(null);
+      setLoadedNoticeTitle("");
+      setRevisionMailText("");
+      setShowSaveChoice(false);
       setError("메일 본문을 입력하거나 분석할 파일을 추가해 주세요.");
       return;
     }
@@ -726,6 +730,10 @@ function App() {
     setIsAnalyzing(true);
     try {
       setLoadedResult(null);
+      setLoadedNoticeId(null);
+      setLoadedNoticeTitle("");
+      setRevisionMailText("");
+      setShowSaveChoice(false);
       const localAnalysis = analyzeSources(mailText, allSources);
       let nextAnalysis = localAnalysis;
 
@@ -789,6 +797,9 @@ function App() {
       persistSessionNow({
         analysis: nextAnalysis,
         loadedResult: null,
+        loadedNoticeId: null,
+        loadedNoticeTitle: "",
+        revisionMailText: "",
         draftTexts: nextDraftTexts,
         activeChannel: "homepage",
         currentStep: 2,
@@ -797,6 +808,10 @@ function App() {
     } catch {
       setAnalysis(null);
       setLoadedResult(null);
+      setLoadedNoticeId(null);
+      setLoadedNoticeTitle("");
+      setRevisionMailText("");
+      setShowSaveChoice(false);
       setError("결과 생성에 실패했습니다. 파일 추출 결과와 메일 내용을 확인해 주세요.");
     } finally {
       setIsAnalyzing(false);
