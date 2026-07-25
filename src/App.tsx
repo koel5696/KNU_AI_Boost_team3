@@ -123,6 +123,22 @@ type SessionDraftState = {
 const channels: Channel[] = ["homepage", "sns", "message"];
 const workflowSteps: WorkflowStep[] = [1, 2, 3, 4, 5];
 const revisionMergeKeys: ExtractedKey[] = ["description", "audience", "period", "benefit", "applyMethod", "contact"];
+const revisionFieldHints: Record<ExtractedKey, string[]> = {
+  title: ["제목", "공고명", "행사명", "프로그램명"],
+  category: ["유형", "분류", "카테고리"],
+  description: ["개요", "내용", "교육내용", "활동내용", "프로그램 설명", "프로그램 내용", "행사 내용", "주요 내용"],
+  audience: ["대상", "자격", "참가 자격", "지원 자격", "모집 대상", "참여대상", "지원자", "참가자"],
+  period: ["기간", "일정", "일시", "날짜", "마감", "마감일", "접수 기간", "운영기간", "교육 기간", "활동 기간", "근무 기간"],
+  benefit: ["혜택", "지원", "상금", "장학금", "활동비", "참가비", "무료", "수료증", "인증서", "시상품"],
+  applyMethod: ["신청", "접수", "제출", "지원", "신청 방법", "접수 방법", "제출 방법", "링크", "폼", "홈페이지"],
+  contact: ["문의", "문의처", "연락처", "담당자", "전화", "이메일", "메일"],
+};
+const revisionDateTokenPattern =
+  /(?:20\d{2}[./-]\s*\d{1,2}[./-]\s*\d{1,2}|20\d{2}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일|\d{1,2}\s*월\s*\d{1,2}\s*일|\d{1,2}[.:]\d{2}|오전|오후|자정)/;
+const revisionUrlPattern = /https?:\/\/[^\s<>"')\]|]+|[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:\/[^\s<>"')\]|]*)?/;
+const revisionEmailPattern = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+const revisionPhonePattern = /0\d{1,2}-\d{3,4}-\d{4}|010-\d{4}-\d{4}/;
+const revisionMoneyPattern = /\d+\s*(?:만\s*)?원|무료|전액|장학금|상금|활동비|지원|수료증|인증서|시상품/;
 
 function isChannel(value: unknown): value is Channel {
   return typeof value === "string" && channels.includes(value as Channel);
@@ -138,13 +154,47 @@ function isDraftTexts(value: unknown): value is ChannelDraftTexts {
   return channels.every((channel) => typeof draft[channel] === "string");
 }
 
-function mergeRevisionInfo(base: ExtractedInfo, revision: ExtractedInfo) {
+function normalizeRevisionText(value: string) {
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function hasRevisionHint(revisionText: string, key: ExtractedKey) {
+  const normalized = normalizeRevisionText(revisionText);
+  return revisionFieldHints[key].some((hint) => normalized.includes(hint.toLowerCase()));
+}
+
+function hasMeaningfulRevisionToken(revisionText: string, key: ExtractedKey) {
+  switch (key) {
+    case "period":
+      return revisionDateTokenPattern.test(revisionText);
+    case "applyMethod":
+      return revisionUrlPattern.test(revisionText) || /(구글폼|온라인|홈페이지|이메일|메일|제출|접수|신청서)/i.test(revisionText);
+    case "contact":
+      return revisionEmailPattern.test(revisionText) || revisionPhonePattern.test(revisionText) || /(문의|담당자|연락처|내선)/.test(revisionText);
+    case "benefit":
+      return revisionMoneyPattern.test(revisionText);
+    case "audience":
+      return /(재학생|휴학생|대학생|청년|구직자|누구나|졸업생|수료생|학부|석사|팀|개인|명)/.test(revisionText);
+    case "description":
+      return !/(마감|날짜|일정|기간|대상|자격|혜택|신청|접수|문의|연락처)/.test(revisionText);
+    default:
+      return false;
+  }
+}
+
+function shouldMergeRevisionField(key: ExtractedKey, revisionText: string) {
+  if (!hasRevisionHint(revisionText, key)) return false;
+  return hasMeaningfulRevisionToken(revisionText, key);
+}
+
+function mergeRevisionInfo(base: ExtractedInfo, revision: ExtractedInfo, revisionText: string) {
   const next = { ...base };
   const changedKeys: ExtractedKey[] = [];
 
   revisionMergeKeys.forEach((key) => {
     const value = revision[key]?.trim();
     if (!value || value === base[key]?.trim()) return;
+    if (!shouldMergeRevisionField(key, revisionText)) return;
     next[key] = value;
     changedKeys.push(key);
   });
@@ -967,7 +1017,7 @@ function App() {
         revisionAnalysis = localRevision;
       }
 
-      const { info: revisedInfo, changedKeys } = mergeRevisionInfo(result, revisionAnalysis.info);
+      const { info: revisedInfo, changedKeys } = mergeRevisionInfo(result, revisionAnalysis.info, revisionMailText);
       if (!changedKeys.length) {
         setSaveMessage("수정 메일에서 기존 공지에 반영할 변경 항목을 찾지 못했습니다. 내용을 조금 더 구체적으로 입력해 주세요.");
         return;
