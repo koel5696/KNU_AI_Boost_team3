@@ -208,8 +208,29 @@ function mergeAiAnalysis(
   const isGenericAiEvidence = (evidence: string) =>
     /함께 분석|선택한 값|메일 본문과 첨부파일|근거 없음|원문에서 해당 정보를 찾지 못했습니다/i.test(evidence);
 
+  const normalizeMergedTitle = (aiTitle: string, localTitle: string) => {
+    const cleanAiTitle = aiTitle.replace(/[<>「」『』]/g, "").replace(/\s+/g, " ").trim();
+    const cleanLocalTitle = localTitle.replace(/[<>「」『』]/g, "").replace(/\s+/g, " ").trim();
+    if (!cleanAiTitle) return cleanLocalTitle;
+    if (/^\[[^\]]+\]/.test(cleanAiTitle)) {
+      return /안내$/.test(cleanAiTitle) ? cleanAiTitle : `${cleanAiTitle} 안내`;
+    }
+
+    const prefix = cleanLocalTitle.match(/^(\[[^\]]+\])\s*(.+)$/);
+    if (!prefix) return /안내$/.test(cleanAiTitle) ? cleanAiTitle : `${cleanAiTitle} 안내`;
+
+    const [, owner, localCore] = prefix;
+    const aiCore = cleanAiTitle.replace(/\s*안내$/, "").trim();
+    const localCoreWithoutGuide = localCore.replace(/\s*안내$/, "").trim();
+    const selectedCore = aiCore && localCoreWithoutGuide.includes(aiCore) ? localCoreWithoutGuide : aiCore || localCoreWithoutGuide;
+    return `${owner} ${selectedCore}${/안내$/.test(selectedCore) ? "" : " 안내"}`;
+  };
+
   const fields = localAnalysis.fields.map((field) => {
-    const value = aiInfo[field.key]?.trim();
+    const aiValue = aiInfo[field.key]?.trim();
+    const value = field.key === "title" && aiValue
+      ? normalizeMergedTitle(aiValue, localAnalysis.info.title)
+      : aiValue;
     if (!value) return field;
 
     mergedInfo[field.key] = value;

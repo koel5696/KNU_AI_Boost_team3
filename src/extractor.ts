@@ -38,6 +38,8 @@ const ORGANIZATION_PATTERN = /센터|팀|재단|기관|사무국|운영팀|지�
 const OMITTED_YEAR_DOTTED_RANGE_PATTERN =
   /(20\d{2})\s*[.]\s*(\d{1,2})\s*[.]\s*(\d{1,2})\s*[.]?\s*(?:\([^)]*\))?\s*~\s*(?:(20\d{2})\s*[.]\s*)?(\d{1,2})\s*[.]\s*(\d{1,2})\s*[.]?/;
 const URL_PATTERN = /https?:\/\/[^\s<>"')\]|]+/i;
+const ORGANIZER_SUFFIXES =
+  "센터|팀|재단|기관|사무국|지원센터|네트워크|연구원|협회|그룹|사업단|클러스터|운영사무국|운영팀";
 
 export const sampleMail = `제목: 청년 대상 AI 직무교육 참가자 모집
 
@@ -74,18 +76,68 @@ function bodyOnly(text: string) {
     .join("\n");
 }
 
-function extractTitle(text: string) {
-  return (
-    lineValue(text, ["제목", "Subject"]) ||
-    firstMatch(text, [
-      /^\s*<\s*([^>\n]{4,80})\s*>/m,
-      /^\s*[「『]\s*([^」』\n]{4,80})\s*[」』]/m,
-    ])
-  )
+function cleanTitleText(value: string) {
+  return value
     .replace(/^제목\s*[:：]\s*/i, "")
     .replace(/[<>「」『』]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function firstTitleLine(text: string) {
+  const line = text
+    .split(/\n+/)
+    .map((item) => item.trim())
+    .find((item) =>
+      item.length >= 4 &&
+      item.length <= 80 &&
+      !/^(안녕하세요|감사합니다|문의|채용 관련 문의|연구 분야 관련 문의|신청|접수|지원자|근무 기간)/.test(item) &&
+      !/(습니다|됩니다|드립니다|바랍니다|합니다|입니다|주세요)[.!?。]?$/.test(item),
+    );
+  return line ? cleanTitleText(line) : "";
+}
+
+function extractOrganizer(text: string) {
+  const suffixGroup = `(?:${ORGANIZER_SUFFIXES})`;
+  const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const patterns = [
+    new RegExp(`^([가-힣A-Za-z0-9·&()\\s]{2,40}?${suffixGroup})(?:에서는|에서|은|는)`),
+    new RegExp(`^안녕하세요[,.]?\\s*([가-힣A-Za-z0-9·&()\\s]{2,40}?${suffixGroup})입니다`),
+    new RegExp(`^문의\\s*[:：]?\\s*([가-힣A-Za-z0-9·&()\\s]{2,40}?${suffixGroup})`),
+  ];
+
+  for (const line of lines) {
+    for (const pattern of patterns) {
+      const match = line.match(pattern);
+      if (match?.[1]) return cleanTitleText(match[1]);
+    }
+  }
+
+  return "";
+}
+
+function titleWithOrganizer(title: string, organizer: string) {
+  const cleanTitle = cleanTitleText(title);
+  const cleanOrganizer = cleanTitleText(organizer);
+  if (!cleanTitle) return "";
+  if (!cleanOrganizer || cleanTitle.includes(cleanOrganizer) || /^\[[^\]]+\]/.test(cleanTitle)) {
+    return cleanTitle;
+  }
+
+  const normalizedTitle = /안내$/.test(cleanTitle) ? cleanTitle : `${cleanTitle} 안내`;
+  return `[${cleanOrganizer}] ${normalizedTitle}`;
+}
+
+function extractTitle(text: string) {
+  const title = (
+    lineValue(text, ["제목", "Subject"]) ||
+    firstMatch(text, [
+      /^\s*<\s*([^>\n]{4,80})\s*>/m,
+      /^\s*[「『]\s*([^」』\n]{4,80})\s*[」』]/m,
+    ]) ||
+    firstTitleLine(text)
+  );
+  return titleWithOrganizer(title, extractOrganizer(text));
 }
 
 export function inferCategory(text: string) {
@@ -441,7 +493,7 @@ ${applyContactSection}`;
     title,
     category,
     body,
-    copyText: `제목: ${title}
+    copyText: `${title}
 분류: ${category}
 
 ${body}`,
@@ -466,8 +518,9 @@ function buildNoticeTags(info: ExtractedInfo, organizerName = "") {
 }
 
 function messageSubject(info: ExtractedInfo) {
-  const title = noticeTitle(info).replace(/^\\[[^\\]]+\\]\\s*/, "").trim();
-  return title || info.category || "공지";
+  const title = noticeTitle(info).trim();
+  if (!title) return info.category || "공지";
+  return /안내$/.test(title) ? title : `${title} 안내`;
 }
 
 export function buildSnsPost(info: ExtractedInfo, organizerName = ""): SnsPost {
@@ -516,7 +569,7 @@ export function buildMessageDraft(info: ExtractedInfo, senderName = ""): Message
   const contact = info.contact || NEEDS_REVIEW;
   const mergedApplyContact = sameNoticeValue(applyMethod, contact);
 
-  const body = `[${subject} 안내]
+  const body = `${subject}
 
 ${messageGreeting(organizer)}
 

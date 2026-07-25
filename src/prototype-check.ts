@@ -1,4 +1,4 @@
-import { buildHomepagePost, buildMessageDraft, extractInfo, sampleMail } from "./extractor";
+import { buildHomepagePost, buildMessageDraft, buildSnsPost, extractInfo, sampleMail } from "./extractor";
 
 function assert(condition: boolean, message: string) {
   if (!condition) {
@@ -21,7 +21,8 @@ assert(normal.audience === "19~34세 청년", "정상 입력에서 대상 정리
 assert(normal.period.includes("2026년 8월 14일"), "정상 입력에서 기간 추출 실패");
 assert(normal.contact === "02-1234-5678", "정상 입력에서 문의처 추출 실패");
 assert(normal.applyMethod === "운영기관 홈페이지", "신청 방법 정리 실패");
-assert(post.copyText.includes("제목:") && post.copyText.includes("02-1234-5678"), "홈페이지 게시글 생성 실패");
+assert(post.copyText.startsWith(post.title) && !post.copyText.includes("제목:"), "홈페이지 게시글에는 제목 라벨 없이 제목만 보여야 합니다.");
+assert(post.copyText.includes("02-1234-5678"), "홈페이지 게시글 생성 실패");
 assert(!post.copyText.includes("신청 방법\n운영기관 홈페이지에서 가능하고 문의"), "신청 방법에 문의처 문장 혼입");
 assert(!post.copyText.includes("모집합니다을 대상으로"), "홈페이지 게시글 대상 문장 결합 오류");
 assert(!post.copyText.includes("습니다을 대상으로"), "홈페이지 게시글 종결어미 결합 오류");
@@ -52,7 +53,7 @@ assert(competition.period.includes("2026년 9월 5일"), "창업 경진대회 �
 assert(competition.benefit.includes("상금") || competition.benefit.includes("멘토링"), "창업 경진대회 입력에서 혜택 추출 실패");
 assert(competition.applyMethod === "운영기관 홈페이지", "창업 경진대회 입력에서 신청 방법 정리 실패");
 assert(competition.contact === "02-9876-5432", "창업 경진대회 입력에서 문의처 추출 실패");
-assert(competitionPost.copyText.includes("제목:"), "창업 경진대회 홈페이지 게시글 생성 실패");
+assert(competitionPost.copyText.startsWith(competitionPost.title) && !competitionPost.copyText.includes("제목:"), "창업 경진대회 홈페이지 게시글에는 제목 라벨이 들어가면 안 됩니다.");
 assert(!competitionPost.copyText.includes("있습니다을 대상으로"), "창업 경진대회 게시글 대상 문장 결합 오류");
 assert(!competitionPost.copyText.includes("참여 대상 대상"), "창업 경진대회 게시글 제목 대상 중복 오류");
 assert(!competitionPost.title.includes("2~4인"), "홈페이지 게시글 제목에 선발 조건이 섞이면 안 됩니다.");
@@ -71,8 +72,27 @@ const researchInternMail = `제목: 2026 하반기 연구인턴 공개모집
 연구 분야 관련 문의: 첨부파일의 부서별 연락처 참고.`;
 
 const research = extractInfo(researchInternMail);
+const researchTitle = "[국가미래기술연구원] 2026 하반기 연구인턴 공개모집 안내";
+const researchHomepagePost = buildHomepagePost(research);
+const researchSnsPost = buildSnsPost(research);
+const researchMessageDraft = buildMessageDraft(research, "교무팀");
+assert(research.title === researchTitle, "본문의 주관 기관과 명시 제목을 조합해 공지 제목을 만들어야 합니다.");
+assert(researchHomepagePost.title === researchTitle, "홈페이지 초안 제목은 주관 기관과 핵심 제목 구조를 유지해야 합니다.");
+assert(researchSnsPost.title === researchTitle, "SNS 초안 제목은 주관 기관과 핵심 제목 구조를 유지해야 합니다.");
+assert(researchMessageDraft.copyText.startsWith(`${researchTitle}\n\n안녕하세요. 교무팀입니다.`), "문자 초안 제목도 발신 소속이 아닌 공지 주체와 핵심 제목을 사용해야 합니다.");
 assert(research.period === "2026.08.03. 09:00부터 2026.08.21. 17:00까지", "연구인턴 입력에서 접수 기간 우선 추출 실패");
 assert(!research.period.includes("9월 14일"), "연구인턴 입력에서 근무 기간을 기간으로 잘못 추출");
+
+const plainResearch = extractInfo(`2026 하반기 연구인턴 공개모집
+
+국가미래기술연구원에서는 다음과 같이 연구인턴을 공개 모집합니다.
+
+지원자는 국내외 대학의 이공계 학부 3학년 이상 재학생 또는 석사과정 재학생이어야 합니다.
+
+접수는 2026.08.03. 09:00부터 2026.08.21. 17:00까지 채용 홈페이지에서 진행됩니다.
+
+채용 관련 문의: recruit@nfit.re.kr`);
+assert(plainResearch.title === researchTitle, "제목 라벨이 없어도 첫 핵심 제목과 주관 기관을 조합해야 합니다.");
 
 const sameApplyContact = buildHomepagePost({
   title: "",

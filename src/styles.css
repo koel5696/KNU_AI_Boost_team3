@@ -2607,23 +2607,25 @@ ul {
 }
 
 .message-view-tabs {
-  display: inline-flex;
-  align-self: flex-start;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  align-self: center;
+  width: min(620px, 100%);
+  gap: 8px;
   border: 1px solid #d5e2ef;
-  border-radius: 6px;
-  padding: 4px;
+  border-radius: 8px;
+  padding: 6px;
   background: #f6f9fc;
 }
 
 .message-view-tabs button {
-  min-height: 34px;
+  min-height: 48px;
   border: 0;
-  border-radius: 4px;
-  padding: 0 12px;
+  border-radius: 6px;
+  padding: 0 18px;
   background: transparent;
   color: #52657a;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 900;
 }
 
@@ -2640,10 +2642,11 @@ ul {
 
   .message-view-tabs {
     width: 100%;
+    grid-template-columns: 1fr;
   }
 
   .message-view-tabs button {
-    flex: 1;
+    width: 100%;
   }
 }
 
