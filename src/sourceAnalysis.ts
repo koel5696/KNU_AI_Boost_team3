@@ -633,18 +633,39 @@ function mergedValueForField(key: ExtractedKey, ranked: FieldCandidate[][], sele
 }
 
 function displayCandidates(key: ExtractedKey, candidates: FieldCandidate[], selected?: FieldCandidate) {
-  if (!selected) return candidates.slice(0, 1);
+  if (!selected) return [];
   const selectedHasLink = (key === "applyMethod" || key === "contact") && SINGLE_URL_PATTERN.test(selected.value);
-  if (selectedHasLink) return [selected];
+  if (selectedHasLink) return [];
   const selectedComparable = selectedHasLink ? simplifyLinkFieldValue(key, selected.value) : selected.value;
   const alternatives = candidates
     .filter((item) => {
       const comparable = selectedHasLink ? simplifyLinkFieldValue(key, item.value) : item.value;
-      return comparable !== selectedComparable;
+      return comparable !== selectedComparable && isMeaningfullyDifferentCandidate(key, selectedComparable, comparable);
     })
     .filter((item) => !selectedHasLink || SINGLE_URL_PATTERN.test(item.value))
     .sort((a, b) => b.confidence - a.confidence);
-  return [selected, ...alternatives.slice(0, 1)];
+  return alternatives.slice(0, 1);
+}
+
+function isMeaningfullyDifferentCandidate(key: ExtractedKey, selected: string, candidate: string) {
+  const selectedNormalized = normalizeCandidate(selected);
+  const candidateNormalized = normalizeCandidate(candidate);
+  if (!selectedNormalized || !candidateNormalized) return false;
+  if (selectedNormalized === candidateNormalized) return false;
+
+  const compactSelected = selectedNormalized.replace(/\s+/g, "");
+  const compactCandidate = candidateNormalized.replace(/\s+/g, "");
+  if (compactSelected.includes(compactCandidate) || compactCandidate.includes(compactSelected)) return false;
+
+  if (key === "period") {
+    const selectedDates = selectedNormalized.match(/\d{4}[-.]\d{1,2}[-.]\d{1,2}|\d{1,2}월\s*\d{1,2}일/g) ?? [];
+    const candidateDates = candidateNormalized.match(/\d{4}[-.]\d{1,2}[-.]\d{1,2}|\d{1,2}월\s*\d{1,2}일/g) ?? [];
+    if (selectedDates.length && candidateDates.length && candidateDates.every((date) => selectedDates.includes(date))) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function selectField(key: ExtractedKey, fieldCandidates: FieldCandidate[]): DetailedField {

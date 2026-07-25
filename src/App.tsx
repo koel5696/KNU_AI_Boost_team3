@@ -210,18 +210,6 @@ function mergeAiAnalysis(
     if (!value) return field;
 
     mergedInfo[field.key] = value;
-    const localCandidate =
-      field.value && field.value !== value
-        ? [{
-            value: field.value,
-            sourceId: "local-analysis",
-            sourceName: field.sourceName || "기본 분석 결과",
-            page: field.page,
-            evidence: field.evidence || "기본 분석에서 선택한 값",
-            confidence: field.confidence,
-            isOcr: false,
-          }]
-        : [];
 
     const evidence = aiEvidence?.[field.key]?.trim() ?? "";
     const selectedEvidence = evidence && !isGenericAiEvidence(evidence) ? evidence : field.evidence;
@@ -232,7 +220,7 @@ function mergeAiAnalysis(
       confidence: Math.max(field.confidence, 0.9),
       sourceName: selectedEvidence ? "" : field.sourceName,
       evidence: selectedEvidence,
-      candidates: localCandidate,
+      candidates: [],
       hasConflict: false,
     };
   });
@@ -1491,25 +1479,27 @@ function App() {
                     <ChannelTab channel="sns" activeChannel={activeChannel} icon={<Hash size={18} />} onSelect={handleChannelSelect} />
                     <ChannelTab channel="message" activeChannel={activeChannel} icon={<MessageCircle size={18} />} onSelect={handleChannelSelect} />
                   </div>
-                  <label className="sender-name-field" htmlFor="sender-name">
-                    <span>
-                      <strong>문자 발신 소속</strong>
-                      <small>메시지 초안 첫 문장에만 반영됩니다.</small>
-                    </span>
-                    <input
-                      id="sender-name"
-                      type="text"
-                      value={senderName}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setSenderName(value);
-                        persistSessionNow({ senderName: value, copyReviewConfirmed: false });
-                        setCopyReviewConfirmed(false);
-                        setCopyState(`${channelLabels[activeChannel]} 초안 복사`);
-                      }}
-                      placeholder="예: 학생지원팀, 대학일자리플러스센터"
-                    />
-                  </label>
+                  {activeChannel === "message" && (
+                    <label className="sender-name-field" htmlFor="sender-name">
+                      <span>
+                        <strong>문자 발신 소속</strong>
+                        <small>메시지 초안 첫 문장에만 반영됩니다.</small>
+                      </span>
+                      <input
+                        id="sender-name"
+                        type="text"
+                        value={senderName}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setSenderName(value);
+                          persistSessionNow({ senderName: value, copyReviewConfirmed: false });
+                          setCopyReviewConfirmed(false);
+                          setCopyState(`${channelLabels[activeChannel]} 초안 복사`);
+                        }}
+                        placeholder="예: 학생지원팀, 대학일자리플러스센터"
+                      />
+                    </label>
+                  )}
                   <div className={user ? "save-feedback is-signed-in" : "save-feedback is-guest"} role="status">
                     <Save size={16} />
                     <span>
@@ -1849,7 +1839,7 @@ function EvidenceItem({ field }: { field: DetailedField }) {
         <strong>{field.label}</strong>
         {!field.sourceName && !field.evidence ? (
           <span>근거 없음</span>
-        ) : field.sourceName !== "직접 입력한 메일 본문" ? (
+        ) : field.sourceName && field.sourceName !== "직접 입력한 메일 본문" ? (
           <span>{field.sourceName}{field.page ? ` · ${field.page}페이지` : ""}</span>
         ) : null}
       </div>
