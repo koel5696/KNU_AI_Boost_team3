@@ -94,6 +94,27 @@ const plainResearch = extractInfo(`2026 하반기 연구인턴 공개모집
 채용 관련 문의: recruit@nfit.re.kr`);
 assert(plainResearch.title === researchTitle, "제목 라벨이 없어도 첫 핵심 제목과 주관 기관을 조합해야 합니다.");
 
+const careerTalk = extractInfo(`제목: 개발자 진로 토크콘서트 참가 신청 안내
+
+안녕하세요. 커리어브릿지 운영사무국입니다.
+
+현직 개발자 4인과 함께하는 온라인 진로 토크콘서트를 개최합니다.
+
+일시: 2026년 8월 27일 목요일 오후 7시
+진행 방식: 실시간 온라인
+참가 대상: 개발 직무에 관심 있는 대학생 및 취업준비생
+주요 내용: 개발 직무 소개, 취업 준비 방법, 현직자 질의응답
+참가비: 무료
+신청: 구글폼 작성
+모집 인원: 선착순 200명
+
+문의: careerbridge@example.org`);
+const careerTalkTitle = "[커리어브릿지] 개발자 진로 토크콘서트 참가 신청 안내";
+assert(careerTalk.title === careerTalkTitle, "운영사무국 같은 실무 부서명은 제목 대괄호에서 핵심 주체명으로 정리되어야 합니다.");
+assert(buildHomepagePost(careerTalk).title === careerTalkTitle, "홈페이지 초안 제목은 행사 주체와 핵심 제목 구조를 유지해야 합니다.");
+assert(buildSnsPost(careerTalk).title === careerTalkTitle, "SNS 초안 제목은 행사 주체와 핵심 제목 구조를 유지해야 합니다.");
+assert(buildMessageDraft(careerTalk).copyText.startsWith(careerTalkTitle), "문자 초안 제목도 행사 주체와 핵심 제목 구조를 유지해야 합니다.");
+
 const sameApplyContact = buildHomepagePost({
   title: "",
   category: "AI 교육/부트캠프",

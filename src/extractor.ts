@@ -116,9 +116,15 @@ function extractOrganizer(text: string) {
   return "";
 }
 
+function displayOrganizerName(organizer: string) {
+  const normalized = cleanTitleText(organizer);
+  const withoutOperatingUnit = normalized.replace(/\s+(?:운영사무국|운영팀|사무국|사업팀|교육운영팀)$/, "").trim();
+  return withoutOperatingUnit.length >= 2 ? withoutOperatingUnit : normalized;
+}
+
 function titleWithOrganizer(title: string, organizer: string) {
   const cleanTitle = cleanTitleText(title);
-  const cleanOrganizer = cleanTitleText(organizer);
+  const cleanOrganizer = displayOrganizerName(organizer);
   if (!cleanTitle) return "";
   if (!cleanOrganizer || cleanTitle.includes(cleanOrganizer) || /^\[[^\]]+\]/.test(cleanTitle)) {
     return cleanTitle;

@@ -1,6 +1,6 @@
 import type { Attachment } from "postal-mime";
 
-export type DocumentKind = "email" | "image" | "pdf" | "docx" | "spreadsheet" | "text";
+export type DocumentKind = "email" | "image" | "pdf" | "word" | "hwp" | "spreadsheet" | "text";
 
 export type ProcessedSource = {
   id: string;
@@ -30,7 +30,10 @@ export const ACCEPTED_FILE_TYPES = [
   ".html",
   ".htm",
   ".pdf",
+  ".doc",
   ".docx",
+  ".hwp",
+  ".hwpx",
   ".xlsx",
   ".png",
   ".jpg",
@@ -167,7 +170,44 @@ async function processDocx(file: File) {
   const mammoth = await import("mammoth");
   const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
   const warnings = result.messages.map((message) => message.message);
-  return [source(file, "docx", result.value, { warnings })];
+  return [source(file, "word", result.value, { warnings })];
+}
+
+function xmlText(xml: string) {
+  const document = new DOMParser().parseFromString(xml, "application/xml");
+  const texts = Array.from(document.getElementsByTagName("*"))
+    .filter((node) => node.localName === "t")
+    .map((node) => node.textContent ?? "")
+    .filter(Boolean);
+  return texts.join("\n");
+}
+
+async function processHwpx(file: File) {
+  const { default: JSZip } = await import("jszip");
+  const archive = await JSZip.loadAsync(await file.arrayBuffer());
+  const textParts: string[] = [];
+  const sectionFiles = Object.values(archive.files)
+    .filter((entry) => !entry.dir && /(?:^|\/)(?:Contents\/)?section[0-9]+\.xml$/i.test(entry.name))
+    .sort((left, right) => left.name.localeCompare(right.name, "ko"));
+
+  for (const entry of sectionFiles) {
+    const text = xmlText(await entry.async("text"));
+    if (text.trim()) textParts.push(text);
+  }
+
+  return [
+    source(file, "hwp", textParts.join("\n\n"), {
+      warnings: textParts.length ? [] : ["HWPX 문서에서 분석할 텍스트를 찾지 못했습니다."],
+    }),
+  ];
+}
+
+function processOriginalOnly(file: File, kind: DocumentKind, label: string) {
+  return [
+    source(file, kind, "", {
+      warnings: [`${label} 문서는 브라우저에서 직접 텍스트를 추출하지 않고 AI 서버에 원본 파일로 전달합니다.`],
+    }),
+  ];
 }
 
 function spreadsheetCellText(value: unknown) {
@@ -349,6 +389,9 @@ export async function processDocumentFile(
 
   if (extension === ".eml") return processEmail(file, onProgress, depth);
   if (extension === ".docx") return processDocx(file);
+  if (extension === ".doc") return processOriginalOnly(file, "word", "DOC");
+  if (extension === ".hwpx") return processHwpx(file);
+  if (extension === ".hwp") return processOriginalOnly(file, "hwp", "HWP");
   if (extension === ".xlsx") return processSpreadsheet(file);
   if (extension === ".pdf") return processPdf(file, onProgress);
   if ([".png", ".jpg", ".jpeg", ".webp", ".bmp", ".heic", ".heif"].includes(extension)) {

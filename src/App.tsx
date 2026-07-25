@@ -678,7 +678,7 @@ function App() {
       setError("파일 처리가 끝난 뒤 내용을 정리해 주세요.");
       return;
     }
-    if (!mailText.trim() && !allSources.some((source) => source.text.trim())) {
+    if (!mailText.trim() && !allSources.some((source) => source.text.trim()) && !aiFiles.length) {
       setAnalysis(null);
       setLoadedResult(null);
       setError("메일 본문을 입력하거나 분석할 파일을 추가해 주세요.");
@@ -1159,7 +1159,6 @@ function App() {
             <strong>공지메이트</strong>
           </button>
           <div className="workspace-context">
-            <small>강남대학교</small>
             <span>공지 제작 워크스페이스</span>
           </div>
           <nav aria-label="서비스 메뉴">
@@ -1273,7 +1272,7 @@ function App() {
             >
               <Upload size={28} />
               <strong>파일을 끌어놓거나 클릭해 선택</strong>
-              <span>EML, PDF, DOCX, XLSX, PNG, JPG, HEIC · 파일당 최대 20MB</span>
+              <span>EML, PDF, Word, HWP/HWPX, XLSX, PNG, JPG, HEIC · 파일당 최대 20MB</span>
             </div>
 
             {uploads.length > 0 && (
@@ -1848,7 +1847,7 @@ function UploadRow({
     ? Mail
     : /\.(png|jpe?g|webp|bmp|heic|heif)$/i.test(upload.fileName)
       ? ImageIcon
-      : /\.(docx|xlsx|pdf)$/i.test(upload.fileName)
+      : /\.(docx?|hwp|hwpx|xlsx|pdf)$/i.test(upload.fileName)
         ? FileArchive
         : Paperclip;
   const warningCount = upload.sources.reduce((sum, source) => sum + source.warnings.length, 0);

@@ -32,7 +32,51 @@ const DIRECT_ATTACHMENT_TYPES = new Set([
   "image/jpeg",
   "image/webp",
   "image/bmp",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/x-hwp",
+  "application/haansofthwp",
+  "application/vnd.hancom.hwp",
+  "application/vnd.hancom.hwpx",
 ]);
+const DIRECT_ATTACHMENT_EXTENSIONS = new Set([".pdf", ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".doc", ".docx", ".hwp", ".hwpx"]);
+
+function extensionOf(fileName: string) {
+  const dot = fileName.lastIndexOf(".");
+  return dot >= 0 ? fileName.slice(dot).toLowerCase() : "";
+}
+
+function inferredMimeType(file: File) {
+  if (file.type && DIRECT_ATTACHMENT_TYPES.has(file.type)) return file.type;
+  switch (extensionOf(file.name)) {
+    case ".pdf":
+      return "application/pdf";
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    case ".bmp":
+      return "image/bmp";
+    case ".doc":
+      return "application/msword";
+    case ".docx":
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case ".hwp":
+      return "application/x-hwp";
+    case ".hwpx":
+      return "application/vnd.hancom.hwpx";
+    default:
+      return "";
+  }
+}
+
+function aiUploadFile(file: File) {
+  const mimeType = inferredMimeType(file);
+  return file.type === mimeType ? file : new File([file], file.name, { type: mimeType });
+}
 
 function compactSource(source: ProcessedSource) {
   return {
@@ -57,7 +101,7 @@ function normalizeQuota(payload: Partial<ImageQuotaResponse> | undefined): Image
 }
 
 export function canSendOriginalToAi(file: File) {
-  return DIRECT_ATTACHMENT_TYPES.has(file.type);
+  return DIRECT_ATTACHMENT_TYPES.has(file.type) || DIRECT_ATTACHMENT_EXTENSIONS.has(extensionOf(file.name));
 }
 
 function normalizeInfo(info: Partial<ExtractedInfo> | undefined): ExtractedInfo {
@@ -95,7 +139,7 @@ export async function analyzeNoticeWithAi(
   formData.append("mailText", mailText);
   formData.append("sources", JSON.stringify(sources.map(compactSource)));
   files.filter(canSendOriginalToAi).forEach((file) => {
-    formData.append("files", file, file.name);
+    formData.append("files", aiUploadFile(file), file.name);
   });
 
   const controller = new AbortController();
@@ -148,7 +192,7 @@ export async function generatePromotionImageWithAi(
   formData.append("mailText", mailText);
   formData.append("sources", JSON.stringify(sources.map(compactSource)));
   files.filter(canSendOriginalToAi).forEach((file) => {
-    formData.append("files", file, file.name);
+    formData.append("files", aiUploadFile(file), file.name);
   });
 
   const controller = new AbortController();
