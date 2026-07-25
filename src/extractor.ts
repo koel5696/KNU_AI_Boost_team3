@@ -456,7 +456,21 @@ function hashtagValue(value: string) {
   return value.replace(/[^0-9A-Za-z가-힣]/g, "");
 }
 
-export function buildSnsPost(info: ExtractedInfo): SnsPost {
+function buildNoticeTags(info: ExtractedInfo, organizerName = "") {
+  const genericTags = new Set(["공지", "안내", "모집", "프로그램", "행사", "강남대학교"]);
+  const candidates = [organizerName, info.category, noticeTitle(info)]
+    .map(hashtagValue)
+    .filter((tag) => tag.length > 1 && !genericTags.has(tag));
+
+  return [...new Set(candidates)].slice(0, 3);
+}
+
+function messageSubject(info: ExtractedInfo) {
+  const title = noticeTitle(info).replace(/^\\[[^\\]]+\\]\\s*/, "").trim();
+  return title || info.category || "공지";
+}
+
+export function buildSnsPost(info: ExtractedInfo, organizerName = ""): SnsPost {
   const title = noticeTitle(info);
   const description = compactValue(sentenceForNotice(info.description));
   const audience = compactValue(normalizeAudience(info.audience));
@@ -476,8 +490,8 @@ ${mergedApplyContact ? `✅ 신청 및 문의: ${applyMethod}` : `✅ 신청: ${
 
 관심 있는 분들의 많은 참여 바랍니다.`;
 
-  const categoryTag = hashtagValue(info.category) || "프로그램안내";
-  const hashtags = `#강남대학교 #${categoryTag} #대학생활 #참여자모집`;
+  const tags = buildNoticeTags(info, organizerName);
+  const hashtags = tags.length ? tags.map((tag) => `#${tag}`).join(" ") : "#공지";
 
   return {
     title,
@@ -493,8 +507,8 @@ function messageGreeting(senderName = "") {
 }
 
 export function buildMessageDraft(info: ExtractedInfo, senderName = ""): MessageDraft {
-  const category = info.category || "프로그램";
-  const title = noticeTitle(info);
+  const organizer = senderName.replace(/\\s+/g, " ").trim();
+  const subject = messageSubject(info);
   const description = info.description ? sentenceForNotice(info.description) : NEEDS_REVIEW;
   const audience = normalizeAudience(info.audience) || NEEDS_REVIEW;
   const period = info.period || NEEDS_REVIEW;
@@ -502,10 +516,9 @@ export function buildMessageDraft(info: ExtractedInfo, senderName = ""): Message
   const contact = info.contact || NEEDS_REVIEW;
   const mergedApplyContact = sameNoticeValue(applyMethod, contact);
 
-  const body = `[강남대학교 ${category} 안내]
-${title}
+  const body = `[${organizer ? `${organizer} | ` : ""}${subject} 안내]
 
-${messageGreeting(senderName)}
+${messageGreeting(organizer)}
 
 개요: ${description}
 대상: ${audience}
