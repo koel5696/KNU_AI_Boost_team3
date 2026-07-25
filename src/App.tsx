@@ -71,6 +71,7 @@ import {
   type SavedNotice,
 } from "./noticeHistory";
 import { analyzeNoticeWithAi } from "./aiNoticeApi";
+import type { AiNoticeResponse } from "./aiNoticeApi";
 
 type Channel = "homepage" | "sns" | "message";
 type UploadStatus = "queued" | "processing" | "done" | "error";
@@ -192,11 +193,12 @@ function clearSessionDraft() {
 function mergeAiAnalysis(
   localAnalysis: AnalysisResult,
   aiInfo: ExtractedInfo,
-  provider = "AI",
-  model = "",
+  aiEvidence: AiNoticeResponse["evidence"] = {},
 ): AnalysisResult {
   const mergedInfo = { ...localAnalysis.info };
-  const modelLabel = model ? `${provider} ${model}` : provider;
+
+  const isGenericAiEvidence = (evidence: string) =>
+    /함께 분석|선택한 값|메일 본문과 첨부파일|근거 없음|원문에서 해당 정보를 찾지 못했습니다/i.test(evidence);
 
   const fields = localAnalysis.fields.map((field) => {
     const value = aiInfo[field.key]?.trim();
@@ -216,12 +218,15 @@ function mergeAiAnalysis(
           }]
         : [];
 
+    const evidence = aiEvidence?.[field.key]?.trim() ?? "";
+    const selectedEvidence = evidence && !isGenericAiEvidence(evidence) ? evidence : field.evidence;
+
     return {
       ...field,
       value,
       confidence: Math.max(field.confidence, 0.9),
-      sourceName: modelLabel,
-      evidence: "메일 본문과 첨부파일을 함께 분석해 선택한 값입니다.",
+      sourceName: selectedEvidence ? "" : field.sourceName,
+      evidence: selectedEvidence,
       candidates: localCandidate,
       hasConflict: false,
     };
@@ -635,7 +640,7 @@ function App() {
 
       try {
         const aiResult = await analyzeNoticeWithAi(mailText, allSources, aiFiles);
-        nextAnalysis = mergeAiAnalysis(localAnalysis, aiResult.info, aiResult.provider, aiResult.model);
+        nextAnalysis = mergeAiAnalysis(localAnalysis, aiResult.info, aiResult.evidence);
         setSaveMessage(user
           ? "AI 분석 결과가 반영되었습니다. 검토 후 저장하면 저장된 공지 목록에 추가됩니다."
           : "AI 분석 결과가 반영되었습니다. 비로그인 상태에서는 복사까지 가능하고 저장과 이미지 제작은 로그인 후 사용할 수 있습니다.");
@@ -1712,7 +1717,7 @@ function EvidenceItem({ field }: { field: DetailedField }) {
     <article className="evidence-item">
       <div className="evidence-head">
         <strong>{field.label}</strong>
-        {!field.sourceName ? (
+        {!field.sourceName && !field.evidence ? (
           <span>근거 없음</span>
         ) : field.sourceName !== "직접 입력한 메일 본문" ? (
           <span>{field.sourceName}{field.page ? ` · ${field.page}페이지` : ""}</span>

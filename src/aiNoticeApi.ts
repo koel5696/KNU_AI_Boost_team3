@@ -5,6 +5,7 @@ export type AiNoticeResponse = {
   info: ExtractedInfo;
   provider?: string;
   model?: string;
+  evidence?: Partial<Record<keyof ExtractedInfo, string>>;
   warnings?: string[];
 };
 
@@ -46,6 +47,19 @@ function normalizeInfo(info: Partial<ExtractedInfo> | undefined): ExtractedInfo 
   };
 }
 
+function normalizeEvidence(evidence: Partial<Record<keyof ExtractedInfo, string>> | undefined) {
+  return {
+    title: evidence?.title?.trim() ?? "",
+    category: evidence?.category?.trim() ?? "",
+    description: evidence?.description?.trim() ?? "",
+    audience: evidence?.audience?.trim() ?? "",
+    period: evidence?.period?.trim() ?? "",
+    benefit: evidence?.benefit?.trim() ?? "",
+    applyMethod: evidence?.applyMethod?.trim() ?? "",
+    contact: evidence?.contact?.trim() ?? "",
+  };
+}
+
 export async function analyzeNoticeWithAi(
   mailText: string,
   sources: ProcessedSource[],
@@ -76,6 +90,7 @@ export async function analyzeNoticeWithAi(
     return {
       ...payload,
       info: normalizeInfo(payload.info),
+      evidence: normalizeEvidence(payload.evidence),
       warnings: payload.warnings ?? [],
     };
   } finally {
