@@ -1088,7 +1088,7 @@ function App() {
           </div>
           <div className="workspace-step-status">
             <span>{uploads.length ? `파일 ${uploads.length}개 추가됨` : "파일 추가 전"}</span>
-            <strong>{isProcessing ? "첨부파일 처리 중" : "입력 준비"}</strong>
+            <strong>{isProcessing ? "첨부파일 처리 중" : isAnalyzing ? "AI 분석 중" : "입력 준비"}</strong>
           </div>
         </section>}
 
@@ -1166,6 +1166,27 @@ function App() {
             )}
           </div>
         </section>}
+
+        {currentStep === 1 && isAnalyzing && (
+          <section className="ai-waiting-card" aria-label="AI 분석 대기 상태" role="status">
+            <div className="ai-orbit" aria-hidden="true">
+              <span />
+              <Sparkles size={24} />
+            </div>
+            <div className="ai-waiting-copy">
+              <p className="panel-kicker">AI 분석 중</p>
+              <h2>메일과 첨부파일을 함께 읽고 있어요</h2>
+              <p>
+                핵심 정보, 기간, 신청 방법, 문의처를 비교하면서 공지 초안에 들어갈 내용을 정리하는 중입니다.
+              </p>
+              <div className="ai-waiting-steps" aria-label="분석 진행 단계">
+                <span className="is-active">자료 확인</span>
+                <span>정보 추출</span>
+                <span>초안 준비</span>
+              </div>
+            </div>
+          </section>
+        )}
 
         {error && (
           <div className="error-message global-error" role="alert">
