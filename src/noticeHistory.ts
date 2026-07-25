@@ -1,6 +1,8 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
+  doc,
   getDocs,
   limit,
   orderBy,
@@ -81,4 +83,8 @@ export async function loadNoticeDrafts(userId: string) {
       ...data,
     };
   });
+}
+
+export async function deleteNoticeDraft(noticeId: string) {
+  await deleteDoc(doc(getNoticesCollection(), noticeId));
 }

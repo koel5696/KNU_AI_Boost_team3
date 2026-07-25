@@ -31,6 +31,7 @@ import {
   RefreshCcw,
   Save,
   Sparkles,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
@@ -63,7 +64,12 @@ import {
   downloadImageDraft,
   type ImageDraft,
 } from "./imageDraft";
-import { loadNoticeDrafts, saveNoticeDraft, type SavedNotice } from "./noticeHistory";
+import {
+  deleteNoticeDraft,
+  loadNoticeDrafts,
+  saveNoticeDraft,
+  type SavedNotice,
+} from "./noticeHistory";
 import { analyzeNoticeWithAi } from "./aiNoticeApi";
 
 type Channel = "homepage" | "sns" | "message";
@@ -252,6 +258,7 @@ function App() {
   const [historyMessage, setHistoryMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [deletingNoticeId, setDeletingNoticeId] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentStep, setCurrentStep] = useState<WorkflowStep>(restoredSession?.currentStep ?? 1);
   const [copyReviewConfirmed, setCopyReviewConfirmed] = useState(restoredSession?.copyReviewConfirmed ?? false);
@@ -854,6 +861,25 @@ function App() {
     setHistoryMessage("저장된 공지를 현재 작업 화면으로 불러왔습니다.");
     setCurrentStep(2);
     setSaveMessage("저장된 공지를 불러왔습니다. 수정 후 다시 저장하면 새 저장 항목으로 추가됩니다.");
+  };
+
+  const handleDeleteSavedNotice = async (notice: SavedNotice) => {
+    if (!user || deletingNoticeId) return;
+
+    const confirmed = window.confirm(`“${notice.title}” 공지를 삭제할까요?\n삭제한 공지는 복구할 수 없습니다.`);
+    if (!confirmed) return;
+
+    setDeletingNoticeId(notice.id);
+    setHistoryMessage("");
+    try {
+      await deleteNoticeDraft(notice.id);
+      setSavedNotices((current) => current.filter((savedNotice) => savedNotice.id !== notice.id));
+      setHistoryMessage("저장된 공지를 삭제했습니다.");
+    } catch {
+      setHistoryMessage("공지 삭제에 실패했습니다. 삭제 권한과 네트워크 상태를 확인해 주세요.");
+    } finally {
+      setDeletingNoticeId(null);
+    }
   };
 
   return (
@@ -1492,15 +1518,31 @@ function App() {
           ) : savedNotices.length ? (
             <div className="history-list">
               {savedNotices.map((notice) => (
-                <article className="history-card" key={notice.id}>
+                <article className="history-card" key={notice.id} aria-busy={deletingNoticeId === notice.id}>
                   <div>
                     <span>{new Date(notice.createdAtMs).toLocaleString("ko-KR")}</span>
                     <h3>{notice.title}</h3>
                     <p>{notice.category}</p>
                   </div>
-                  <button className="secondary-button" type="button" onClick={() => handleLoadSavedNotice(notice)}>
-                    불러오기
-                  </button>
+                  <div className="history-actions">
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => handleLoadSavedNotice(notice)}
+                      disabled={Boolean(deletingNoticeId)}
+                    >
+                      불러오기
+                    </button>
+                    <button
+                      className="danger-button"
+                      type="button"
+                      onClick={() => handleDeleteSavedNotice(notice)}
+                      disabled={Boolean(deletingNoticeId)}
+                    >
+                      <Trash2 size={17} aria-hidden="true" />
+                      {deletingNoticeId === notice.id ? "삭제 중" : "삭제"}
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>
