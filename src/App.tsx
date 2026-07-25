@@ -64,6 +64,7 @@ import {
   type ImageDraft,
 } from "./imageDraft";
 import { loadNoticeDrafts, saveNoticeDraft, type SavedNotice } from "./noticeHistory";
+import { analyzeNoticeWithAi } from "./aiNoticeApi";
 
 type Channel = "homepage" | "sns" | "message";
 type UploadStatus = "queued" | "processing" | "done" | "error";
@@ -72,6 +73,7 @@ type ChannelDraftTexts = Record<Channel, string>;
 
 type UploadItem = {
   id: string;
+  file?: File;
   fileName: string;
   size: number;
   status: UploadStatus;
@@ -181,6 +183,52 @@ function clearSessionDraft() {
   }
 }
 
+function mergeAiAnalysis(
+  localAnalysis: AnalysisResult,
+  aiInfo: ExtractedInfo,
+  provider = "AI",
+  model = "",
+): AnalysisResult {
+  const mergedInfo = { ...localAnalysis.info };
+  const modelLabel = model ? `${provider} ${model}` : provider;
+
+  const fields = localAnalysis.fields.map((field) => {
+    const value = aiInfo[field.key]?.trim();
+    if (!value) return field;
+
+    mergedInfo[field.key] = value;
+    const localCandidate =
+      field.value && field.value !== value
+        ? [{
+            value: field.value,
+            sourceId: "local-analysis",
+            sourceName: field.sourceName || "기본 분석 결과",
+            page: field.page,
+            evidence: field.evidence || "기본 분석에서 선택한 값",
+            confidence: field.confidence,
+            isOcr: false,
+          }]
+        : [];
+
+    return {
+      ...field,
+      value,
+      confidence: Math.max(field.confidence, 0.9),
+      sourceName: modelLabel,
+      evidence: "메일 본문과 첨부파일을 함께 분석해 선택한 값입니다.",
+      candidates: localCandidate,
+      hasConflict: false,
+    };
+  });
+
+  return {
+    ...localAnalysis,
+    info: mergedInfo,
+    fields,
+    conflicts: [],
+  };
+}
+
 function App() {
   const restoredSessionRef = useRef<SessionDraftState | null | undefined>(undefined);
   if (restoredSessionRef.current === undefined) {
@@ -204,6 +252,7 @@ function App() {
   const [historyMessage, setHistoryMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentStep, setCurrentStep] = useState<WorkflowStep>(restoredSession?.currentStep ?? 1);
   const [copyReviewConfirmed, setCopyReviewConfirmed] = useState(restoredSession?.copyReviewConfirmed ?? false);
   const [imagePreview, setImagePreview] = useState<{ fileName: string; url: string } | null>(null);
@@ -267,6 +316,12 @@ function App() {
 
   const allSources = useMemo(
     () => uploads.flatMap((upload) => upload.sources),
+    [uploads],
+  );
+  const aiFiles = useMemo(
+    () => uploads
+      .filter((upload) => upload.status === "done" && upload.file)
+      .map((upload) => upload.file as File),
     [uploads],
   );
   const isProcessing = uploads.some(
@@ -459,6 +514,7 @@ function App() {
 
     const items: UploadItem[] = files.map((file) => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      file: supportsFile(file) ? file : undefined,
       fileName: file.name,
       size: file.size,
       status: supportsFile(file) ? "queued" : "error",
@@ -544,7 +600,7 @@ function App() {
     if (event.dataTransfer.files.length) void processFiles(event.dataTransfer.files);
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     setActiveChannel("homepage");
     setCopyReviewConfirmed(false);
     setCopyState("홈페이지 초안 복사");
@@ -553,7 +609,7 @@ function App() {
     setHistoryMessage("");
     setSaveMessage(user ? "분석 결과가 갱신되었습니다. 검토 후 저장하면 저장된 공지 목록에 추가됩니다." : "분석 결과가 갱신되었습니다. 비로그인 상태에서는 복사와 이미지 저장만 가능하고, 공지 저장은 로그인 후 가능합니다.");
 
-    if (isProcessing) {
+    if (isProcessing || isAnalyzing) {
       setError("파일 처리가 끝난 뒤 내용을 정리해 주세요.");
       return;
     }
@@ -564,9 +620,25 @@ function App() {
       return;
     }
 
+    setIsAnalyzing(true);
     try {
       setLoadedResult(null);
-      const nextAnalysis = analyzeSources(mailText, allSources);
+      const localAnalysis = analyzeSources(mailText, allSources);
+      let nextAnalysis = localAnalysis;
+
+      try {
+        const aiResult = await analyzeNoticeWithAi(mailText, allSources, aiFiles);
+        nextAnalysis = mergeAiAnalysis(localAnalysis, aiResult.info, aiResult.provider, aiResult.model);
+        setSaveMessage(user
+          ? "AI 분석 결과가 반영되었습니다. 검토 후 저장하면 저장된 공지 목록에 추가됩니다."
+          : "AI 분석 결과가 반영되었습니다. 비로그인 상태에서는 복사까지 가능하고 저장과 이미지 제작은 로그인 후 사용할 수 있습니다.");
+      } catch {
+        nextAnalysis = localAnalysis;
+        setSaveMessage(user
+          ? "AI 분석 서버 응답을 받지 못해 기본 분석 결과로 정리했습니다. 검토 후 저장할 수 있습니다."
+          : "AI 분석 서버 응답을 받지 못해 기본 분석 결과로 정리했습니다. 저장과 이미지 제작은 로그인 후 사용할 수 있습니다.");
+      }
+
       const nextPost = buildHomepagePost(nextAnalysis.info);
       const nextSns = buildSnsPost(nextAnalysis.info);
       const nextMessage = buildMessageDraft(nextAnalysis.info);
@@ -590,6 +662,8 @@ function App() {
       setAnalysis(null);
       setLoadedResult(null);
       setError("결과 생성에 실패했습니다. 파일 추출 결과와 메일 내용을 확인해 주세요.");
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -659,6 +733,10 @@ function App() {
 
   const handleImageDownload = async () => {
     if (!imageDraft) return;
+    if (!user) {
+      setImageStatus("이미지 제작은 로그인 후 사용할 수 있습니다.");
+      return;
+    }
     setImageStatus("이미지 만드는 중...");
     try {
       const fileName = await downloadImageDraft(imageDraft);
@@ -666,6 +744,14 @@ function App() {
     } catch {
       setImageStatus("이미지 저장에 실패했습니다.");
     }
+  };
+
+  const handleOpenImageStep = () => {
+    if (!user) {
+      setSaveMessage("이미지 제작은 로그인 후 사용할 수 있습니다.");
+      return;
+    }
+    moveToStep(4);
   };
 
   const updateField = (key: ExtractedKey, value: string) => {
@@ -1089,10 +1175,10 @@ function App() {
         )}
 
         {currentStep === 1 && <div className="primary-actions step-actions">
-          <button className="primary-button" type="button" onClick={handleGenerate} disabled={isProcessing}>
-            {isProcessing ? <LoaderCircle className="spin" size={18} /> : <FileText size={18} />}
-            {isProcessing ? "파일 처리 중" : "내용 정리하고 다음"}
-            {!isProcessing && <ArrowRight size={18} />}
+          <button className="primary-button" type="button" onClick={handleGenerate} disabled={isProcessing || isAnalyzing}>
+            {isProcessing || isAnalyzing ? <LoaderCircle className="spin" size={18} /> : <FileText size={18} />}
+            {isProcessing ? "파일 처리 중" : isAnalyzing ? "AI 분석 중" : "내용 정리하고 다음"}
+            {!isProcessing && !isAnalyzing && <ArrowRight size={18} />}
           </button>
           <button className="secondary-button" type="button" onClick={handleReset}>
             <RefreshCcw size={18} />
@@ -1299,9 +1385,10 @@ function App() {
                           className="image-download-button"
                           type="button"
                           onClick={handleImageDownload}
+                          disabled={!user}
                         >
                           <Download size={18} />
-                          PNG 이미지 저장
+                          {user ? "PNG 이미지 저장" : "로그인 후 저장"}
                         </button>
                       </div>
                       <div className="image-workspace">
@@ -1342,8 +1429,8 @@ function App() {
                 <ArrowLeft size={18} />
                 검토로 돌아가기
               </button>
-              <button className="primary-button" type="button" onClick={() => moveToStep(4)}>
-                이미지 제작하기
+              <button className="primary-button" type="button" onClick={handleOpenImageStep}>
+                {user ? "이미지 제작하기" : "로그인 후 이미지 제작"}
                 <ArrowRight size={18} />
               </button>
             </div>
