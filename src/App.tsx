@@ -364,7 +364,7 @@ function App() {
 
   const channelDrafts = useMemo(() => {
     if (!result || !post) return null;
-    const sns = buildSnsPost(result);
+    const sns = buildSnsPost(result, senderName);
     const message = buildMessageDraft(result, senderName);
     return {
       homepage: post.copyText,
@@ -670,7 +670,7 @@ function App() {
       }
 
       const nextPost = buildHomepagePost(nextAnalysis.info);
-      const nextSns = buildSnsPost(nextAnalysis.info);
+      const nextSns = buildSnsPost(nextAnalysis.info, senderName);
       const nextMessage = buildMessageDraft(nextAnalysis.info, senderName);
       const nextDraftTexts = {
         homepage: nextPost.copyText,
@@ -875,7 +875,7 @@ function App() {
     setLoadedResult(notice.extractedInfo);
     setDraftTexts({
       homepage: notice.post.copyText,
-      sns: buildSnsPost(notice.extractedInfo).copyText,
+      sns: buildSnsPost(notice.extractedInfo, senderName).copyText,
       message: buildMessageDraft(notice.extractedInfo, senderName).copyText,
     });
     setActiveChannel("homepage");
