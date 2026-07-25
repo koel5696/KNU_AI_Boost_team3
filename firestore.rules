@@ -33,10 +33,37 @@ service cloud.firestore {
         && request.resource.data.createdAtMs is int;
     }
 
+    function updatesOwnNotice() {
+      return ownsNotice()
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.createdAtMs == resource.data.createdAtMs
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.keys().hasOnly([
+          'userId',
+          'title',
+          'category',
+          'body',
+          'copyText',
+          'sourceMail',
+          'extractedInfo',
+          'createdAtMs',
+          'createdAt',
+          'updatedAtMs',
+          'updatedAt',
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.category is string
+        && request.resource.data.body is string
+        && request.resource.data.copyText is string
+        && request.resource.data.sourceMail is string
+        && request.resource.data.extractedInfo is map
+        && request.resource.data.updatedAtMs is int;
+    }
+
     match /notices/{noticeId} {
       allow create: if createsOwnNotice();
       allow read, delete: if ownsNotice();
-      allow update: if false;
+      allow update: if updatesOwnNotice();
     }
 
     match /{document=**} {

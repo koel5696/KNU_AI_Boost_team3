@@ -65,6 +65,7 @@ import {
   deleteNoticeDraft,
   loadNoticeDrafts,
   saveNoticeDraft,
+  updateNoticeDraft,
   type SavedNotice,
 } from "./noticeHistory";
 import {
@@ -111,6 +112,9 @@ type SessionDraftState = {
   analysis: AnalysisResult | null;
   loadedResult: ExtractedInfo | null;
   draftTexts: ChannelDraftTexts | null;
+  loadedNoticeId: string | null;
+  loadedNoticeTitle: string;
+  revisionMailText: string;
   activeChannel: Channel;
   currentStep: WorkflowStep;
   copyReviewConfirmed: boolean;
@@ -118,6 +122,7 @@ type SessionDraftState = {
 
 const channels: Channel[] = ["homepage", "sns", "message"];
 const workflowSteps: WorkflowStep[] = [1, 2, 3, 4, 5];
+const revisionMergeKeys: ExtractedKey[] = ["description", "audience", "period", "benefit", "applyMethod", "contact"];
 
 function isChannel(value: unknown): value is Channel {
   return typeof value === "string" && channels.includes(value as Channel);
@@ -131,6 +136,20 @@ function isDraftTexts(value: unknown): value is ChannelDraftTexts {
   if (!value || typeof value !== "object") return false;
   const draft = value as Partial<ChannelDraftTexts>;
   return channels.every((channel) => typeof draft[channel] === "string");
+}
+
+function mergeRevisionInfo(base: ExtractedInfo, revision: ExtractedInfo) {
+  const next = { ...base };
+  const changedKeys: ExtractedKey[] = [];
+
+  revisionMergeKeys.forEach((key) => {
+    const value = revision[key]?.trim();
+    if (!value || value === base[key]?.trim()) return;
+    next[key] = value;
+    changedKeys.push(key);
+  });
+
+  return { info: next, changedKeys };
 }
 
 function isImageFileName(fileName: string) {
@@ -156,6 +175,9 @@ function loadSessionDraft(): SessionDraftState | null {
       analysis: parsed.analysis ?? null,
       loadedResult: parsed.loadedResult ?? null,
       draftTexts: isDraftTexts(parsed.draftTexts) ? parsed.draftTexts : null,
+      loadedNoticeId: typeof parsed.loadedNoticeId === "string" ? parsed.loadedNoticeId : null,
+      loadedNoticeTitle: typeof parsed.loadedNoticeTitle === "string" ? parsed.loadedNoticeTitle : "",
+      revisionMailText: typeof parsed.revisionMailText === "string" ? parsed.revisionMailText : "",
       activeChannel: isChannel(parsed.activeChannel) ? parsed.activeChannel : "homepage",
       currentStep,
       copyReviewConfirmed: Boolean(parsed.copyReviewConfirmed),
@@ -283,6 +305,11 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [savedNotices, setSavedNotices] = useState<SavedNotice[]>([]);
+  const [loadedNoticeId, setLoadedNoticeId] = useState<string | null>(restoredSession?.loadedNoticeId ?? null);
+  const [loadedNoticeTitle, setLoadedNoticeTitle] = useState(restoredSession?.loadedNoticeTitle ?? "");
+  const [revisionMailText, setRevisionMailText] = useState(restoredSession?.revisionMailText ?? "");
+  const [isApplyingRevision, setIsApplyingRevision] = useState(false);
+  const [showSaveChoice, setShowSaveChoice] = useState(false);
   const [historyMessage, setHistoryMessage] = useState("");
   const [saveMessage, setSaveMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -316,6 +343,9 @@ function App() {
       analysis,
       loadedResult,
       draftTexts,
+      loadedNoticeId,
+      loadedNoticeTitle,
+      revisionMailText,
       activeChannel,
       currentStep,
       copyReviewConfirmed,
@@ -441,6 +471,9 @@ function App() {
       analysis,
       loadedResult,
       draftTexts,
+      loadedNoticeId,
+      loadedNoticeTitle,
+      revisionMailText,
       activeChannel,
       currentStep,
       copyReviewConfirmed,
@@ -452,6 +485,8 @@ function App() {
       Boolean(analysis) ||
       Boolean(loadedResult) ||
       Boolean(draftTexts) ||
+      Boolean(loadedNoticeId) ||
+      revisionMailText.trim() !== "" ||
       activeChannel !== "homepage" ||
       currentStep !== 1 ||
       copyReviewConfirmed;
@@ -467,11 +502,14 @@ function App() {
       analysis,
       loadedResult,
       draftTexts,
+      loadedNoticeId,
+      loadedNoticeTitle,
+      revisionMailText,
       activeChannel,
       currentStep,
       copyReviewConfirmed,
     });
-  }, [activeChannel, analysis, copyReviewConfirmed, currentStep, draftTexts, loadedResult, mailText, senderName]);
+  }, [activeChannel, analysis, copyReviewConfirmed, currentStep, draftTexts, loadedNoticeId, loadedNoticeTitle, loadedResult, mailText, revisionMailText, senderName]);
 
   useEffect(() => {
     const flushVisibleDraft = () => {
@@ -776,6 +814,10 @@ function App() {
     setImagePreview(null);
     setAnalysis(null);
     setLoadedResult(null);
+    setLoadedNoticeId(null);
+    setLoadedNoticeTitle("");
+    setRevisionMailText("");
+    setShowSaveChoice(false);
     setError("");
     setHistoryMessage("");
     setSaveMessage(user ? "입력을 초기화했습니다. 새 공지를 만든 뒤 저장할 수 있습니다." : "입력을 초기화했습니다. 저장 기능은 로그인 후 사용할 수 있습니다.");
@@ -886,6 +928,72 @@ function App() {
     setCopyReviewConfirmed(false);
   };
 
+  const handleApplyRevisionMail = async () => {
+    if (!loadedNoticeId || !result) {
+      setSaveMessage("저장된 공지를 먼저 불러온 뒤 수정 메일을 반영할 수 있습니다.");
+      return;
+    }
+    if (!revisionMailText.trim()) {
+      setSaveMessage("수정 안내 메일 내용을 입력해 주세요.");
+      return;
+    }
+
+    setIsApplyingRevision(true);
+    setHistoryMessage("");
+    setSaveMessage("수정 메일을 분석해 기존 공지에 반영하는 중입니다.");
+    try {
+      const localRevision = analyzeSources(revisionMailText, []);
+      let revisionAnalysis = localRevision;
+      try {
+        const aiRevision = await analyzeNoticeWithAi(revisionMailText, [], []);
+        revisionAnalysis = mergeAiAnalysis(localRevision, aiRevision.info, aiRevision.evidence);
+      } catch {
+        revisionAnalysis = localRevision;
+      }
+
+      const { info: revisedInfo, changedKeys } = mergeRevisionInfo(result, revisionAnalysis.info);
+      if (!changedKeys.length) {
+        setSaveMessage("수정 메일에서 기존 공지에 반영할 변경 항목을 찾지 못했습니다. 내용을 조금 더 구체적으로 입력해 주세요.");
+        return;
+      }
+
+      const revisedPost = buildHomepagePost(revisedInfo);
+      const revisedSns = buildSnsPost(revisedInfo, senderName);
+      const revisedMessage = buildMessageDraft(revisedInfo, senderName);
+      const revisedDraftTexts = {
+        homepage: revisedPost.copyText,
+        sns: revisedSns.copyText,
+        message: revisedMessage.copyText,
+      };
+
+      setAnalysis(null);
+      setLoadedResult(revisedInfo);
+      setDraftTexts(revisedDraftTexts);
+      setCopyReviewConfirmed(false);
+      setCopyState(`${channelLabels[activeChannel]} 초안 복사`);
+      setShowSaveChoice(false);
+      setGeneratedImage(null);
+      setCurrentStep(2);
+      persistSessionNow({
+        analysis: null,
+        loadedResult: revisedInfo,
+        draftTexts: revisedDraftTexts,
+        revisionMailText,
+        currentStep: 2,
+        copyReviewConfirmed: false,
+      });
+
+      const changedLabels = changedKeys.map((key) => fieldLabels[key]).join(", ");
+      setHistoryMessage("수정 메일의 변경 내용을 기존 공지 초안에 반영했습니다.");
+      setSaveMessage(`${changedLabels} 항목을 반영했습니다. 저장 시 기존 공지 업데이트 또는 새 공지 저장을 선택할 수 있습니다.`);
+    } catch {
+      setHistoryMessage("수정 메일 반영에 실패했습니다.");
+      setSaveMessage("수정 메일을 분석하지 못했습니다. 입력 내용과 네트워크 상태를 확인해 주세요.");
+    } finally {
+      setIsApplyingRevision(false);
+    }
+  };
+
   const handleLogin = async () => {
     setHistoryMessage("");
     setSaveMessage("");
@@ -909,28 +1017,40 @@ function App() {
     await signOut(auth);
   };
 
-  const handleSave = async () => {
+  const postForSave = () => {
+    if (!post) return null;
+    return {
+      ...post,
+      copyText: draftTexts?.homepage ?? post.copyText,
+    };
+  };
+
+  const handleSaveAsNew = async () => {
     if (!user) {
       setHistoryMessage("로그인해야 공지를 저장할 수 있습니다.");
       setSaveMessage("저장하지 않았습니다. 로그인 후 저장하면 계정별 공지로 보관됩니다.");
       return;
     }
-    if (!post || !result) {
+    const savePost = postForSave();
+    if (!savePost || !result) {
       setSaveMessage("저장할 공지 초안이 없습니다. 먼저 전체 내용 정리하기를 실행해 주세요.");
       return;
     }
 
     setIsSaving(true);
+    setShowSaveChoice(false);
     setHistoryMessage("");
     setSaveMessage("공지 초안을 저장하는 중입니다.");
     try {
       const saved = await saveNoticeDraft({
         userId: user.uid,
-        post,
+        post: savePost,
         sourceMail: mailText,
         extractedInfo: result,
       });
       setSavedNotices((current) => [saved, ...current]);
+      setLoadedNoticeId(saved.id);
+      setLoadedNoticeTitle(saved.title);
       setHistoryMessage("현재 공지 초안을 저장했습니다.");
       setSaveMessage("저장되었습니다. 아래 저장된 공지 목록 맨 위에서 다시 불러올 수 있습니다.");
     } catch {
@@ -941,13 +1061,72 @@ function App() {
     }
   };
 
+  const handleUpdateLoadedNotice = async () => {
+    if (!user) {
+      setHistoryMessage("로그인해야 공지를 저장할 수 있습니다.");
+      setSaveMessage("저장하지 않았습니다. 로그인 후 저장하면 계정별 공지로 보관됩니다.");
+      return;
+    }
+    const savePost = postForSave();
+    if (!savePost || !result) {
+      setSaveMessage("저장할 공지 초안이 없습니다. 먼저 전체 내용 정리하기를 실행해 주세요.");
+      return;
+    }
+    const targetNotice = savedNotices.find((notice) => notice.id === loadedNoticeId);
+    if (!targetNotice) {
+      setShowSaveChoice(false);
+      setSaveMessage("불러온 저장 공지를 찾지 못했습니다. 새 공지로 저장해 주세요.");
+      return;
+    }
+
+    setIsSaving(true);
+    setShowSaveChoice(false);
+    setHistoryMessage("");
+    setSaveMessage("불러온 공지를 업데이트하는 중입니다.");
+    try {
+      const updated = await updateNoticeDraft({
+        notice: targetNotice,
+        post: savePost,
+        sourceMail: mailText,
+        extractedInfo: result,
+      });
+      setSavedNotices((current) => current.map((notice) => (notice.id === updated.id ? updated : notice)));
+      setLoadedNoticeTitle(updated.title);
+      setHistoryMessage("불러온 공지를 업데이트했습니다.");
+      setSaveMessage("기존 저장 공지에 수정 내용이 반영되었습니다.");
+    } catch {
+      setHistoryMessage("공지 업데이트에 실패했습니다. 저장 권한과 설정을 확인해 주세요.");
+      setSaveMessage("업데이트에 실패했습니다. 저장 권한, 설정, 네트워크 상태를 확인해 주세요.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user) {
+      setHistoryMessage("로그인해야 공지를 저장할 수 있습니다.");
+      setSaveMessage("저장하지 않았습니다. 로그인 후 저장하면 계정별 공지로 보관됩니다.");
+      return;
+    }
+    if (loadedNoticeId) {
+      setShowSaveChoice(true);
+      setSaveMessage("불러온 공지를 수정 중입니다. 기존 공지를 업데이트할지, 새 공지로 저장할지 선택해 주세요.");
+      return;
+    }
+    await handleSaveAsNew();
+  };
+
   const handleLoadSavedNotice = (notice: SavedNotice) => {
     setMailText(notice.sourceMail);
     setUploads([]);
     setAnalysis(null);
     setLoadedResult(notice.extractedInfo);
+    setLoadedNoticeId(notice.id);
+    setLoadedNoticeTitle(notice.title);
+    setRevisionMailText("");
+    setShowSaveChoice(false);
     setDraftTexts({
-      homepage: notice.post.copyText,
+      homepage: notice.copyText,
       sns: buildSnsPost(notice.extractedInfo, senderName).copyText,
       message: buildMessageDraft(notice.extractedInfo, senderName).copyText,
     });
@@ -957,7 +1136,7 @@ function App() {
     setImageStatus("");
     setHistoryMessage("저장된 공지를 현재 작업 화면으로 불러왔습니다.");
     setCurrentStep(2);
-    setSaveMessage("저장된 공지를 불러왔습니다. 수정 후 다시 저장하면 새 저장 항목으로 추가됩니다.");
+    setSaveMessage("저장된 공지를 불러왔습니다. 수정 후 저장하면 업데이트 또는 새 저장을 선택할 수 있습니다.");
   };
 
   const handleDeleteSavedNotice = async (notice: SavedNotice) => {
@@ -971,6 +1150,12 @@ function App() {
     try {
       await deleteNoticeDraft(notice.id);
       setSavedNotices((current) => current.filter((savedNotice) => savedNotice.id !== notice.id));
+      if (loadedNoticeId === notice.id) {
+        setLoadedNoticeId(null);
+        setLoadedNoticeTitle("");
+        setShowSaveChoice(false);
+        setSaveMessage("현재 불러온 저장 공지가 삭제되어, 다음 저장은 새 공지로 저장됩니다.");
+      }
       setHistoryMessage("저장된 공지를 삭제했습니다.");
     } catch {
       setHistoryMessage("공지 삭제에 실패했습니다. 삭제 권한과 네트워크 상태를 확인해 주세요.");
@@ -1386,6 +1571,30 @@ function App() {
           {result ? (
             <>
               {currentStep === 2 && <>
+                {loadedNoticeId && (
+                  <div className="revision-mail-panel" aria-label="수정 메일 반영">
+                    <div>
+                      <p className="panel-kicker">수정 메일 입력</p>
+                      <h3>불러온 공지에 변경 안내를 반영</h3>
+                      <span>변경·정정 메일 내용을 붙여넣으면 AI가 바뀐 항목만 기존 공지에 반영합니다.</span>
+                    </div>
+                    <textarea
+                      value={revisionMailText}
+                      onChange={(event) => setRevisionMailText(event.target.value)}
+                      placeholder="예: 기존 안내된 신청 마감일이 변경되어 다시 안내드립니다. 변경 마감일: 2026년 8월 16일 오후 6시"
+                      aria-label="수정 안내 메일 입력"
+                    />
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={handleApplyRevisionMail}
+                      disabled={isApplyingRevision || !revisionMailText.trim()}
+                    >
+                      {isApplyingRevision ? <LoaderCircle className="spin" size={18} /> : <Sparkles size={18} />}
+                      {isApplyingRevision ? "수정 내용 분석 중" : "수정 내용 반영"}
+                    </button>
+                  </div>
+                )}
                 <div className="review-workspace">
                   <div className="review-summary" aria-label="추출 정보">
                     <h3 className="review-column-title">추출 정보</h3>
@@ -1526,12 +1735,26 @@ function App() {
                   )}
                   <div className={user ? "save-feedback is-signed-in" : "save-feedback is-guest"} role="status">
                     <Save size={16} />
-                    <span>
-                      {saveMessage ||
-                        (user
-                          ? "저장하면 저장된 공지 목록에 추가됩니다."
-                          : "비로그인 상태에서는 공지가 저장되지 않습니다. 로그인 후 계정별로 저장할 수 있습니다.")}
-                    </span>
+                    <div>
+                      <span>
+                        {saveMessage ||
+                          (loadedNoticeId
+                            ? `“${loadedNoticeTitle || "불러온 공지"}” 수정 내용은 저장 시 업데이트하거나 새 공지로 저장할 수 있습니다.`
+                            : user
+                              ? "저장하면 저장된 공지 목록에 추가됩니다."
+                              : "비로그인 상태에서는 공지가 저장되지 않습니다. 로그인 후 계정별로 저장할 수 있습니다.")}
+                      </span>
+                      {user && loadedNoticeId && showSaveChoice && (
+                        <div className="save-choice-actions" aria-label="저장 방식 선택">
+                          <button type="button" onClick={handleUpdateLoadedNotice} disabled={isSaving}>
+                            기존 공지 업데이트
+                          </button>
+                          <button type="button" onClick={handleSaveAsNew} disabled={isSaving}>
+                            새 공지로 저장
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <label className="review-check" htmlFor={`copy-review-${activeChannel}`}>
                     <input

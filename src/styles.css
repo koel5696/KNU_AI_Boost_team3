@@ -1530,6 +1530,40 @@ button:focus-visible {
   margin-top: 2px;
 }
 
+.save-feedback > div {
+  display: grid;
+  gap: 10px;
+  flex: 1;
+}
+
+.save-choice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.save-choice-actions button {
+  min-height: 38px;
+  border: 1px solid rgba(0, 122, 204, 0.24);
+  border-radius: 6px;
+  padding: 0 13px;
+  background: #ffffff;
+  color: #173d63;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.save-choice-actions button:first-child {
+  background: var(--blue);
+  color: #ffffff;
+}
+
+.save-choice-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .save-feedback.is-signed-in {
   border-color: #a9d9c5;
   background: #eefaf5;
@@ -1540,6 +1574,51 @@ button:focus-visible {
   border-color: #f0cc93;
   background: #fff8ec;
   color: var(--warning);
+}
+
+.revision-mail-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+  border: 1px solid #cfddea;
+  border-radius: 8px;
+  padding: 18px;
+  background: #f8fbff;
+}
+
+.revision-mail-panel h3 {
+  margin: 3px 0 4px;
+  color: var(--text);
+  font-size: 22px;
+}
+
+.revision-mail-panel span {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.revision-mail-panel textarea {
+  width: 100%;
+  min-height: 128px;
+  resize: vertical;
+  border: 1px solid #cfddea;
+  border-radius: 6px;
+  padding: 14px;
+  background: #ffffff;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.revision-mail-panel textarea:focus {
+  outline: 2px solid rgba(0, 122, 204, 0.18);
+  border-color: var(--blue);
+}
+
+.revision-mail-panel button {
+  justify-self: end;
 }
 
 .draft-editor-panel {

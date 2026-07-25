@@ -8,6 +8,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  updateDoc,
   where,
 } from "firebase/firestore";
 import { db } from "./firebase";
@@ -23,6 +24,7 @@ export type SavedNotice = {
   sourceMail: string;
   extractedInfo: ExtractedInfo;
   createdAtMs: number;
+  updatedAtMs?: number;
 };
 
 type SavedNoticeDoc = Omit<SavedNotice, "id">;
@@ -63,6 +65,36 @@ export async function saveNoticeDraft(params: {
     sourceMail: params.sourceMail,
     extractedInfo: params.extractedInfo,
     createdAtMs,
+  };
+}
+
+export async function updateNoticeDraft(params: {
+  notice: SavedNotice;
+  post: HomepagePost;
+  sourceMail: string;
+  extractedInfo: ExtractedInfo;
+}) {
+  const updatedAtMs = Date.now();
+  await updateDoc(doc(getNoticesCollection(), params.notice.id), {
+    title: params.post.title,
+    category: params.post.category,
+    body: params.post.body,
+    copyText: params.post.copyText,
+    sourceMail: params.sourceMail,
+    extractedInfo: params.extractedInfo,
+    updatedAtMs,
+    updatedAt: serverTimestamp(),
+  });
+
+  return {
+    ...params.notice,
+    title: params.post.title,
+    category: params.post.category,
+    body: params.post.body,
+    copyText: params.post.copyText,
+    sourceMail: params.sourceMail,
+    extractedInfo: params.extractedInfo,
+    updatedAtMs,
   };
 }
 
