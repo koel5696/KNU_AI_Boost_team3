@@ -934,6 +934,7 @@ function App() {
       return;
     }
     if (!revisionMailText.trim()) {
+      setHistoryMessage("수정 안내 메일 입력값이 비어 있습니다.");
       setSaveMessage("수정 안내 메일 내용을 입력해 주세요.");
       return;
     }
@@ -1588,7 +1589,7 @@ function App() {
                       className="secondary-button"
                       type="button"
                       onClick={handleApplyRevisionMail}
-                      disabled={isApplyingRevision || !revisionMailText.trim()}
+                      disabled={isApplyingRevision}
                     >
                       {isApplyingRevision ? <LoaderCircle className="spin" size={18} /> : <Sparkles size={18} />}
                       {isApplyingRevision ? "수정 내용 분석 중" : "수정 내용 반영"}
@@ -1744,16 +1745,6 @@ function App() {
                               ? "저장하면 저장된 공지 목록에 추가됩니다."
                               : "비로그인 상태에서는 공지가 저장되지 않습니다. 로그인 후 계정별로 저장할 수 있습니다.")}
                       </span>
-                      {user && loadedNoticeId && showSaveChoice && (
-                        <div className="save-choice-actions" aria-label="저장 방식 선택">
-                          <button type="button" onClick={handleUpdateLoadedNotice} disabled={isSaving}>
-                            기존 공지 업데이트
-                          </button>
-                          <button type="button" onClick={handleSaveAsNew} disabled={isSaving}>
-                            새 공지로 저장
-                          </button>
-                        </div>
-                      )}
                     </div>
                   </div>
                   <label className="review-check" htmlFor={`copy-review-${activeChannel}`}>
@@ -1985,6 +1976,32 @@ function App() {
         </section>}
       </div>
       </>}
+      {user && loadedNoticeId && showSaveChoice && (
+        <div className="save-choice-modal" role="dialog" aria-modal="true" aria-labelledby="save-choice-title" onClick={() => setShowSaveChoice(false)}>
+          <div className="save-choice-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="save-choice-head">
+              <div>
+                <p className="panel-kicker">저장 방식 선택</p>
+                <h2 id="save-choice-title">수정한 공지를 어떻게 저장할까요?</h2>
+              </div>
+              <button type="button" className="remove-file" onClick={() => setShowSaveChoice(false)} aria-label="저장 방식 선택 닫기">
+                <X size={18} />
+              </button>
+            </div>
+            <p>
+              “{loadedNoticeTitle || "불러온 공지"}”에서 불러온 내용을 수정했습니다. 기존 저장 공지에 덮어쓰거나, 별도 공지로 새롭게 저장할 수 있습니다.
+            </p>
+            <div className="save-choice-modal-actions">
+              <button type="button" className="primary-button" onClick={handleUpdateLoadedNotice} disabled={isSaving}>
+                {isSaving ? "업데이트 중" : "기존 공지 업데이트"}
+              </button>
+              <button type="button" className="secondary-button" onClick={handleSaveAsNew} disabled={isSaving}>
+                새 공지로 저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {imagePreview && (
         <div className="image-preview-modal" role="dialog" aria-modal="true" aria-label={`${imagePreview.fileName} 미리보기`} onClick={() => setImagePreview(null)}>
           <div className="image-preview-panel" onClick={(event) => event.stopPropagation()}>
