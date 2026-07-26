@@ -1,4 +1,5 @@
 import type { Attachment } from "postal-mime";
+import { assertSafeFile, extensionOf } from "./fileSecurity";
 
 export type DocumentKind = "email" | "image" | "pdf" | "word" | "hwp" | "spreadsheet" | "text";
 
@@ -30,9 +31,7 @@ export const ACCEPTED_FILE_TYPES = [
   ".html",
   ".htm",
   ".pdf",
-  ".doc",
   ".docx",
-  ".hwp",
   ".hwpx",
   ".xlsx",
   ".png",
@@ -48,11 +47,6 @@ const URL_PATTERN = /https?:\/\/[^\s<>"')\]|]+/gi;
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function extensionOf(fileName: string) {
-  const dot = fileName.lastIndexOf(".");
-  return dot >= 0 ? fileName.slice(dot).toLowerCase() : "";
 }
 
 function unique(values: string[]) {
@@ -198,14 +192,6 @@ async function processHwpx(file: File) {
   return [
     source(file, "hwp", textParts.join("\n\n"), {
       warnings: textParts.length ? [] : ["HWPX 문서에서 분석할 텍스트를 찾지 못했습니다."],
-    }),
-  ];
-}
-
-function processOriginalOnly(file: File, kind: DocumentKind, label: string) {
-  return [
-    source(file, kind, "", {
-      warnings: [`${label} 문서는 브라우저에서 직접 텍스트를 추출하지 않고 AI 서버에 원본 파일로 전달합니다.`],
     }),
   ];
 }
@@ -383,15 +369,14 @@ export async function processDocumentFile(
 ): Promise<ProcessedSource[]> {
   if (file.size > MAX_FILE_SIZE) throw new Error("파일 크기는 20MB 이하여야 합니다.");
   if (!supportsFile(file)) throw new Error("지원하지 않는 파일 형식입니다.");
+  await assertSafeFile(file);
 
   const extension = extensionOf(file.name);
   onProgress?.({ progress: 2, message: "파일 형식 확인 중" });
 
   if (extension === ".eml") return processEmail(file, onProgress, depth);
   if (extension === ".docx") return processDocx(file);
-  if (extension === ".doc") return processOriginalOnly(file, "word", "DOC");
   if (extension === ".hwpx") return processHwpx(file);
-  if (extension === ".hwp") return processOriginalOnly(file, "hwp", "HWP");
   if (extension === ".xlsx") return processSpreadsheet(file);
   if (extension === ".pdf") return processPdf(file, onProgress);
   if ([".png", ".jpg", ".jpeg", ".webp", ".bmp", ".heic", ".heif"].includes(extension)) {

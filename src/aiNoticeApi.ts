@@ -32,14 +32,10 @@ const DIRECT_ATTACHMENT_TYPES = new Set([
   "image/jpeg",
   "image/webp",
   "image/bmp",
-  "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/x-hwp",
-  "application/haansofthwp",
-  "application/vnd.hancom.hwp",
   "application/vnd.hancom.hwpx",
 ]);
-const DIRECT_ATTACHMENT_EXTENSIONS = new Set([".pdf", ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".doc", ".docx", ".hwp", ".hwpx"]);
+const DIRECT_ATTACHMENT_EXTENSIONS = new Set([".pdf", ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".docx", ".hwpx"]);
 
 function extensionOf(fileName: string) {
   const dot = fileName.lastIndexOf(".");
@@ -60,12 +56,8 @@ function inferredMimeType(file: File) {
       return "image/webp";
     case ".bmp":
       return "image/bmp";
-    case ".doc":
-      return "application/msword";
     case ".docx":
       return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-    case ".hwp":
-      return "application/x-hwp";
     case ".hwpx":
       return "application/vnd.hancom.hwpx";
     default:
